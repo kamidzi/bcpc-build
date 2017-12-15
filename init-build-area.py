@@ -4,7 +4,7 @@ import logging
 import sys
 import string
 import shlex
-from shutil import chown
+import shutil
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
@@ -116,7 +116,30 @@ if __name__ == '__main__':
                 logger.debug('Setting permissions {perms} on configuration'
                              ' file at {filename}'.format(perms=perms,
                                                           filename=conffile))
-                chown(conffile, **perms)
+                shutil.chown(conffile, **perms)
+
+            def install_certs():
+                CERTS_DIR = '/var/tmp/bcpc-cacerts'
+
+                user, group = [name]*2
+                # local certificate store in build area
+                dest = os.path.join(basedir, 'cacerts')
+
+                def install_copy(src, dst, *d, follow_symlinks=True):
+                    shutil.copy2(src, dst, *d, follow_symlinks=follow_symlinks)
+                    # also chown the files
+                    shutil.chown(dst, user=user, group=group)
+
+                try:
+                    logger.info('Installing certificates to %s' % dest)
+                    shutil.copytree(src=CERTS_DIR, dst=dest, symlinks=True,
+                                    copy_function=install_copy)
+                    shutil.chown(dest, user=user, group=group)
+                except shutil.Error as e:
+                    logger.error('Could not install certificates.')
+                    sys.exit(e)
+
+            install_certs()
 
         def populate_build_unit(name):
             logger.info('Populating build unit...')
@@ -134,6 +157,7 @@ if __name__ == '__main__':
         except KeyError:
             logger.info('Creating build user {} ...'.format(name))
             try:
+                # TODO(kmidzi): allow passing of mode
                 utils.useradd(name, homedir_prefix=BUILD_HOME)
             except Exception as e:
                 print('Could not create user {}. Check euid in calling'
