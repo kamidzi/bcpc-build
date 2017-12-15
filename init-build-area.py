@@ -2,10 +2,12 @@
 import os
 import logging
 import sys
+import string
 import shlex
 from shutil import chown
 from pwd import getpwnam
 from subprocess import check_output
+from textwrap import dedent
 from bcpc_build import utils
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -14,6 +16,7 @@ logger = logging.getLogger(__name__)
 BUILD_HOME = '/build'
 # Also the username
 BUILD_DIR_PREFIX = 'chef-bcpc.'
+BUILD_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
 
 
 class AllocationError(Exception):
@@ -70,9 +73,54 @@ if __name__ == '__main__':
         def get_build_path(name):
             return os.path.join(BUILD_HOME, name)
 
-        def populate_build_unit():
+        def configure_build_unit(name):
+            basedir = get_build_path(name)
+            workdir = os.path.join(basedir, 'chef-bcpc')
+            conf_dir = os.path.join(workdir, 'bootstrap', 'config')
+            conffile = os.path.join(conf_dir, 'bootstrap_config.sh.overrides')
+
+            tmpl_src = dedent("""\
+                export BCPC_VM_DIR=${build_dir}/bcpc-vms
+                export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
+                export BOOTSTRAP_ADDITIONAL_CACERTS_DIR=${build_dir}/cacerts
+                export BOOTSTRAP_APT_MIRROR=
+                export BOOTSTRAP_CACHE_DIR=${build_dir}/.bcpc-cache
+                export BOOTSTRAP_CHEF_DO_CONVERGE=1
+                export BOOTSTRAP_CHEF_ENV=Test-Laptop-Vagrant
+                export BOOTSTRAP_HTTP_PROXY_URL=${http_proxy_url}
+                export BOOTSTRAP_HTTPS_PROXY_URL=${https_proxy_url}
+                export BOOTSTRAP_VM_CPUS=2
+                export BOOTSTRAP_VM_DRIVE_SIZE=20480
+                export BOOTSTRAP_VM_MEM=2048
+                export CLUSTER_VM_CPUS=2
+                export CLUSTER_VM_DRIVE_SIZE=20480
+                export CLUSTER_VM_MEM=3072
+                export FILECACHE_MOUNT_POINT=/chef-bcpc-files
+                export MONITORING_NODES=0
+                export REPO_MOUNT_POINT=/chef-bcpc-host
+                export VM_SWAP_SIZE=8192
+            """)
+            tmpl = string.Template(tmpl_src)
+            # TODO(kmidzi): get from somewhere??
+            values = {
+                'build_dir': basedir,
+                'http_proxy_url': 'http://proxy.example.com:3128',
+                'https_proxy_url': 'http://proxy.example.com:3128',
+            }
+            configuration = tmpl.substitute(values)
+            with open(conffile, 'w') as c:
+                logger.info('Writing build configuration to %s' % conffile)
+                logger.debug({'configuration': configuration})
+                c.write(configuration)
+                perms = {'user': name, 'group': name}
+                logger.debug('Setting permissions {perms} on configuration'
+                             ' file at {filename}'.format(perms=perms,
+                                                          filename=conffile))
+                chown(conffile, **perms)
+
+        def populate_build_unit(name):
             logger.info('Populating build unit...')
-            src_url = 'https://github.com/bloomberg/chef-bcpc'
+            src_url = BUILD_SRC_URL
             cmd = ("su -c 'git -C {dest} clone {url}' "
                    "{username}").format(dest=build_path,
                                         url=src_url,
@@ -93,6 +141,7 @@ if __name__ == '__main__':
                 sys.exit(e)
 
         # populate
-        populate_build_unit()
+        populate_build_unit(name)
+        configure_build_unit(name)
 
     initialize_build_unit(username)
