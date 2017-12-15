@@ -86,16 +86,12 @@ if __name__ == '__main__':
         except KeyError:
             logger.info('Creating build user {} ...'.format(name))
             try:
-                utils.useradd(name)
+                utils.useradd(name, homedir_prefix=BUILD_HOME)
             except Exception as e:
                 print('Could not create user {}. Check euid in calling'
                       ' environment?'.format(name), file=sys.stderr)
                 sys.exit(e)
 
-        build_path = get_build_path(name)
-        # create the directory
-        os.mkdir(build_path)
-        chown(build_path, name)
         # populate
         populate_build_unit()
 
