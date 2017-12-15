@@ -85,7 +85,12 @@ if __name__ == '__main__':
             logger.debug('Build user {} already exits.'.format(name))
         except KeyError:
             logger.info('Creating build user {} ...'.format(name))
-            utils.useradd(name)
+            try:
+                utils.useradd(name)
+            except Exception as e:
+                print('Could not create user {}. Check euid in calling'
+                      ' environment?'.format(name), file=sys.stderr)
+                sys.exit(e)
 
         build_path = get_build_path(name)
         # create the directory
