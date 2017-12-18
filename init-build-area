@@ -1,0 +1,8 @@
+#!/bin/bash
+hash -r
+
+module_name='bcpc_build'
+DIR="$(readlink -f ${0%/*})"
+PATH="/bin:/usr/bin:/usr/sbin:$DIR/${module_name}"
+
+exec init-build-area.py "$@"

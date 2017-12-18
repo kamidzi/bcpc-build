@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from bcpc_build import utils
+import utils
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
-from bcpc_build.exceptions import *
+from exceptions import *
 import logging
 import os
 import shlex
