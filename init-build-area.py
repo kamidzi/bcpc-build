@@ -10,6 +10,11 @@ import shutil
 import string
 import sys
 import urllib.parse
+try:
+    import simplejson as json
+except ImportError:
+    import json
+
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
@@ -192,4 +197,13 @@ if __name__ == '__main__':
         populate_build_unit(name)
         configure_build_unit(name)
 
+    def display_build_info(build_id=None):
+        info = {
+            'build_dir': build_path,
+            'source_url': BUILD_SRC_URL,
+            'build_user': username,
+        }
+        print(json.dumps(info, indent=2))
+
     initialize_build_unit(username)
+    display_build_info()
