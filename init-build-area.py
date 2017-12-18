@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-import os
-import logging
-import sys
-import string
-import shlex
-import shutil
+from bcpc_build import utils
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
-from bcpc_build import utils
+import logging
+import os
+import shlex
+import shutil
+import string
+import sys
+import urllib.parse
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
@@ -16,7 +17,8 @@ logger = logging.getLogger(__name__)
 BUILD_HOME = '/build'
 # Also the username
 BUILD_DIR_PREFIX = 'chef-bcpc.'
-BUILD_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
+BUILD_SRC_URL = os.environ.get('BUILD_SRC_URL',
+                               'https://github.com/bloomberg/chef-bcpc')
 
 
 class AllocationError(Exception):
@@ -144,9 +146,31 @@ if __name__ == '__main__':
         def populate_build_unit(name):
             logger.info('Populating build unit...')
             src_url = BUILD_SRC_URL
-            cmd = ("su -c 'git -C {dest} clone {url}' "
-                   "{username}").format(dest=build_path,
-                                        url=src_url,
+
+            def git_args(url):
+                parsed = urllib.parse.urlparse(url)
+                path = urllib.parse.unquote(parsed.path)
+                # Translate branch url to git arguments
+                args = {}
+                args['git'] = '-C %s' % build_path
+                args['url'] = url
+                try:
+                    path, branch = path.split('/tree/')
+                    logger.debug('Detected branch %s from source url' % branch)
+                    args['clone'] = '-b %s' % branch
+                    # replace the path to exclude branch
+                    u = parsed._replace(path=path)
+                    clean_url = urllib.parse.urlunparse(u)
+                    args['url'] = clean_url
+                except (AttributeError, ValueError) as e:
+                    logger.debug(e)
+                return args
+
+            args = git_args(src_url)
+            cmd = ("su -c 'git {git_args} clone {clone_args} {url}' "
+                   "{username}").format(git_args=args.get('git', ''),
+                                        clone_args=args.get('clone', ''),
+                                        url=args.get('url'),
                                         username=name)
             check_output(shlex.split(cmd))
 
