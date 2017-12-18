@@ -3,6 +3,7 @@ from bcpc_build import utils
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
+from bcpc_build.exceptions import *
 import logging
 import os
 import shlex
@@ -24,15 +25,6 @@ BUILD_HOME = '/build'
 BUILD_DIR_PREFIX = 'chef-bcpc.'
 BUILD_SRC_URL = os.environ.get('BUILD_SRC_URL',
                                'https://github.com/bloomberg/chef-bcpc')
-
-
-class AllocationError(Exception):
-    _MESSAGE = 'Error allocating build area. Existing areas: %s'
-    # TODO(kmidzi): careful about length of _areas_
-
-    def __init__(self, areas):
-        message = self._MESSAGE % areas
-        super(AllocationError, self).__init__(message)
 
 
 def setup(conf=None):
