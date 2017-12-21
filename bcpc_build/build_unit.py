@@ -12,13 +12,16 @@ def cli():
 def build(source_url='ca'):
     import subprocess
     import shlex
+    import os
 
-    cmd_str  = ('env BUILD_SRC_URL="{source_url}" init-build-area.py'
+    import sys
+    current_dir = os.path.normpath(os.path.realpath(os.path.dirname(__file__)))
+    bin_path = os.path.join(current_dir, 'init-build-area.py')
+    cmd_str  = ('env BUILD_SRC_URL="{source_url}" {bin_path}'
                 ''.format(**locals()))
     cmd = shlex.split(cmd_str)
-    print(__file__)
-    print(dir())
     o = subprocess.check_output(cmd)
+    sys.exit(o)
 
 
 @cli.command()
