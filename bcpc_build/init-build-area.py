@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import utils
+from exceptions import *
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
-from exceptions import *
+from build_unit_allocator import BuildUnitAllocator
 import logging
 import os
 import shlex
@@ -11,6 +11,7 @@ import shutil
 import string
 import sys
 import urllib.parse
+import utils
 try:
     import simplejson as json
 except ImportError:
@@ -20,9 +21,11 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-BUILD_HOME = '/build'
+# temp
+ALLOCATOR = BuildUnitAllocator()
+BUILD_HOME = ALLOCATOR.conf.get('build_home')
 # Also the username
-BUILD_DIR_PREFIX = 'chef-bcpc.'
+BUILD_DIR_PREFIX = ALLOCATOR.BUILD_DIR_PREFIX
 BUILD_SRC_URL = os.environ.get('BUILD_SRC_URL',
                                'https://github.com/bloomberg/chef-bcpc')
 
@@ -42,24 +45,10 @@ def setup(conf=None):
 
 
 def list_build_areas():
-    # TODO(kmidzi): should this return [] ???
-    try:
-        return os.listdir(BUILD_HOME)
-    except FileNotFoundError as e:
-        return []
-
+    return ALLOCATOR.list_build_areas()
 
 def allocate_build_dir(*args, **kwargs):
-    dirs = list_build_areas()
-
-    # get the suffixes
-    def split_suffix(x):
-        return int(x.split('.')[-1])
-
-    latest = 0 if not dirs else max(map(split_suffix, dirs))
-    new_id = latest + 1
-    return os.path.join(BUILD_HOME, BUILD_DIR_PREFIX + str(new_id))
-
+    return ALLOCATOR.allocate_build_dir(*args, **kwargs)
 
 if __name__ == '__main__':
     setup()

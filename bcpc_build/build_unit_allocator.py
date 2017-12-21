@@ -6,7 +6,7 @@ DEFAULT_BUILD_HOME = '/build'
 class BuildUnitAllocator(object):
     BUILD_DIR_PREFIX = 'chef-bcpc.'
 
-    def init(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         self._conf = kwargs.get('conf', {})
         self._conf.setdefault('build_home', DEFAULT_BUILD_HOME)
 
