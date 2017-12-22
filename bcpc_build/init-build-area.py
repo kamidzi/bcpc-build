@@ -22,38 +22,13 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-# temp
-ALLOCATOR = BuildUnitAllocator()
-BUILD_HOME = ALLOCATOR.conf.get('build_home')
-# Also the username
-BUILD_DIR_PREFIX = ALLOCATOR.BUILD_DIR_PREFIX
 BUILD_SRC_URL = os.environ.get('BUILD_SRC_URL',
                                'https://github.com/bloomberg/chef-bcpc')
 
-
-def setup(conf=None):
-
-    def create_build_home():
-        mode = 0o2755
-        try:
-            os.mkdir(path=BUILD_HOME, mode=mode)
-            logger.info('Created build home at {}'.format(BUILD_HOME))
-        except PermissionError:
-            sys.exit('Setup requires superuser privileges.')
-
-    if not os.path.exists(BUILD_HOME):
-        create_build_home()
-
-
-def list_build_areas():
-    return ALLOCATOR.list_build_areas()
-
-def allocate_build_dir(*args, **kwargs):
-    return ALLOCATOR.allocate_build_dir(*args, **kwargs)
-
 if __name__ == '__main__':
-    setup()
-    build_path = allocate_build_dir()
+    allocator = BuildUnitAllocator()
+    allocator.setup()
+    build_path = allocator.allocate_build_dir()
     username = os.path.basename(build_path)
     # Offload to user creation script?
 
@@ -102,7 +77,7 @@ if __name__ == '__main__':
             logger.info('Creating build user {} ...'.format(name))
             try:
                 # TODO(kmidzi): allow passing of mode
-                utils.useradd(name, homedir_prefix=BUILD_HOME)
+                utils.useradd(name, homedir_prefix=allocator.conf.get('build_home'))
             except Exception as e:
                 print('Could not create user {}. Check euid in calling'
                       ' environment?'.format(name), file=sys.stderr)
@@ -113,8 +88,5 @@ if __name__ == '__main__':
         configure_build_unit(name)
         return bunit
 
-    def display_build_info(build):
-        print(build.to_json())
-
     build = initialize_build_unit(username)
-    display_build_info(build)
+    print(build.to_json())

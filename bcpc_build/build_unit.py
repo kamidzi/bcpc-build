@@ -102,7 +102,8 @@ class BuildUnit(object):
         install_certs()
 
     def get_build_path(self):
-        return os.path.join(BUILD_HOME, self.name)
+        build_home = BuildUnitAllocator.DEFAULT_BUILD_HOME
+        return os.path.join(build_home, self.name)
 
     def to_json(self):
         indent = 2
