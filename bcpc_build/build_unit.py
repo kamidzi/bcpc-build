@@ -17,11 +17,6 @@ except ImportError:
     import json
 
 
-DEFAULT_BUILD_HOME = '/build'
-DEFAULT_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
-
-BUILD_HOME = DEFAULT_BUILD_HOME
-
 class NotImplementedError(Exception):
     def __init__(self, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
@@ -35,7 +30,6 @@ class BuildUnit(object):
         self.name = name
         self.id = None
 
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
         self.logger = logging.getLogger(__name__)
 
     def configure(self):
@@ -122,24 +116,49 @@ class BuildUnit(object):
         return json.dumps(info, indent=2)
 
 
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 class BuildUnitAllocator(object):
+    DEFAULT_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
     BUILD_DIR_PREFIX = 'chef-bcpc.'
+    DEFAULT_BUILD_HOME = '/build'
 
     def __init__(self, *args, **kwargs):
         self._conf = kwargs.get('conf', {})
-        self._conf.setdefault('build_home', DEFAULT_BUILD_HOME)
+        self._conf.setdefault('build_home', self.DEFAULT_BUILD_HOME)
+        self._conf.setdefault('src_url', self.DEFAULT_SRC_URL)
+        self._logger = logging.getLogger(__name__)
 
     @property
     def conf(self):
         return self._conf
 
-    # TODO(kamidzi): temporary???
+    @property
+    def logger(self):
+        return self._logger
+
+    def setup(self):
+        build_home = self.conf.get('build_home')
+        def create_build_home():
+            mode = 0o2755
+            try:
+                os.mkdir(path=build_home, mode=mode)
+                self.logger.info('Created build home at {}'.format(build_home))
+            except PermissionError:
+                sys.exit('Setup requires superuser privileges.')
+
+        if not os.path.exists(build_home):
+            create_build_home()
+
+    # TODO(kamidzi): move me
     def list_build_areas(self):
         # TODO(kmidzi): should this return [] ???
         try:
             return os.listdir(self.conf.get('build_home'))
         except FileNotFoundError as e:
             return []
+
+    def allocate(name=None, *args, **kwargs):
+        pass
 
     def allocate_build_dir(self, *args, **kwargs):
         """Allocates a Build Unit data directory"""
@@ -160,7 +179,7 @@ def cli():
     pass
 
 @cli.command()
-@click.option('--source-url', default=DEFAULT_SRC_URL, help='Sources for build.')
+@click.option('--source-url', default=BuildUnitAllocator.DEFAULT_SRC_URL, help='Sources for build.')
 def build(source_url='ca'):
     BuildUnit('name').configure()
     import subprocess
