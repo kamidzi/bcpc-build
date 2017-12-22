@@ -9,8 +9,10 @@ import logging
 import os
 import shlex
 import shutil
+import urllib.parse
 import string
 import sys
+import utils
 try:
     import simplejson as json
 except ImportError:
@@ -23,14 +25,46 @@ class NotImplementedError(Exception):
 
 
 class BuildUnit(object):
-    def __init__(self, name=None):
+    def __init__(self, name, build_user, source_url):
         self.build_dir = None
-        self.source_url = None
-        self.build_user = None
+        self.source_url = source_url
+        self.build_user = build_user
         self.name = name
         self.id = None
 
         self.logger = logging.getLogger(__name__)
+
+    def populate(self):
+        self.logger.info('Populating build unit...')
+        src_url = self.source_url
+        build_path = self.get_build_path()
+
+        def git_args(url):
+            parsed = urllib.parse.urlparse(url)
+            path = urllib.parse.unquote(parsed.path)
+            # Translate branch url to git arguments
+            args = {}
+            args['git'] = '-C %s' % build_path
+            args['url'] = url
+            try:
+                path, branch = path.split('/tree/')
+                self.logger.debug('Detected branch %s from source url' % branch)
+                args['clone'] = '-b %s' % branch
+                # replace the path to exclude branch
+                u = parsed._replace(path=path)
+                clean_url = urllib.parse.urlunparse(u)
+                args['url'] = clean_url
+            except (AttributeError, ValueError) as e:
+                self.logger.debug(e)
+            return args
+
+        args = git_args(src_url)
+        cmd = ("su -c 'git {git_args} clone {clone_args} {url}' "
+                "{username}").format(git_args=args.get('git', ''),
+                                    clone_args=args.get('clone', ''),
+                                    url=args.get('url'),
+                                    username=self.build_user)
+        check_output(shlex.split(cmd))
 
     def configure(self):
         """Configures the build unit."""
@@ -158,21 +192,51 @@ class BuildUnitAllocator(object):
         except FileNotFoundError as e:
             return []
 
-    def allocate(name=None, *args, **kwargs):
-        pass
+    def provision(self, build, *args, **kwargs):
+        build.populate()
+        build.configure()
+        return build
 
-    def allocate_build_dir(self, *args, **kwargs):
-        """Allocates a Build Unit data directory"""
+    def allocate(self, *args, **kwargs):
+        kwargs = kwargs.copy()
+        build_user = self.allocate_build_user(self.generate_build_user_name())
+        build_dir = self.allocate_build_dir()
+        kwargs.setdefault('source_url', self.DEFAULT_SRC_URL)
+        kwargs.setdefault('build_user', build_user)
+        kwargs.setdefault('name', build_user)
+        bunit = BuildUnit(**kwargs)
+        return bunit
+
+    def generate_build_user_name(self):
         dirs = self.list_build_areas()
-
-        # get the suffixes
+       # get the suffixes
         def split_suffix(x):
             return int(x.split('.')[-1])
 
         latest = 0 if not dirs else max(map(split_suffix, dirs))
         new_id = latest + 1
-        return os.path.join(self.conf.get('build_home'),
-                            self.BUILD_DIR_PREFIX + str(new_id))
+        return ''.join([self.BUILD_DIR_PREFIX, str(new_id)])
+
+    def allocate_build_user(self, username):
+        # TODO(kmidzi): check for existing files, etc...
+        try:
+            getpwnam(username)
+            self.logger.debug('Build user {} already exits.'.format(username))
+        except KeyError:
+            self.logger.info('Creating build user {} ...'.format(username))
+            try:
+                # TODO(kmidzi): allow passing of mode
+                utils.useradd(username, homedir_prefix=self.conf.get('build_home'))
+            except Exception as e:
+                print('Could not create user {}. Check euid in calling'
+                      ' environment?'.format(username), file=sys.stderr)
+                sys.exit(e)
+        return username
+
+    def allocate_build_dir(self, *args, **kwargs):
+        """Allocates a Build Unit data directory"""
+        build_user = self.generate_build_user_name()
+        return os.path.join(self.conf.get('build_home'), build_user)
 
 
 @click.group()
