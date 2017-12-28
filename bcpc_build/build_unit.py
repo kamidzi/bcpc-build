@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-import click
 import os
-from exceptions import *
+from bcpc_build.exceptions import *
+from bcpc_build import utils
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
@@ -12,7 +11,6 @@ import shutil
 import urllib.parse
 import string
 import sys
-import utils
 try:
     import simplejson as json
 except ImportError:
@@ -237,34 +235,3 @@ class BuildUnitAllocator(object):
         """Allocates a Build Unit data directory"""
         build_user = self.generate_build_user_name()
         return os.path.join(self.conf.get('build_home'), build_user)
-
-
-@click.group()
-def cli():
-    pass
-
-@cli.command()
-@click.option('--source-url', default=BuildUnitAllocator.DEFAULT_SRC_URL, help='Sources for build.')
-def build(source_url='ca'):
-    BuildUnit('name').configure()
-    import subprocess
-    import shlex
-    import os
-
-    import sys
-    current_dir = os.path.normpath(os.path.realpath(os.path.dirname(__file__)))
-    bin_path = os.path.join(current_dir, 'init-build-area.py')
-    cmd_str  = ('env BUILD_SRC_URL="{source_url}" {bin_path}'
-                ''.format(**locals()))
-    cmd = shlex.split(cmd_str)
-    o = subprocess.check_output(cmd)
-    sys.exit(o)
-
-
-@cli.command()
-@click.option('--format', help='Listing format')
-def list(format):
-    pass
-
-if __name__ == '__main__':
-    cli()
