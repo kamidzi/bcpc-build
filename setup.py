@@ -11,5 +11,6 @@ setup(
     entry_points='''
         [console_scripts]
         bcpc-build-unit=bcpc_build.cmd.bcpc_build_unit:cli
+        bcpc-build=bcpc_build.cmd.bcpc_build:cli
     ''',
 )
