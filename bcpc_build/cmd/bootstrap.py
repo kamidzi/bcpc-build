@@ -9,13 +9,8 @@ except ImportError:
     import json
 
 
-@click.group()
-@click.pass_context
-def cli(ctx):
-    setattr(ctx, 'conf', {})
 
-
-@cli.command(help='Bootstraps a new build.')
+@click.command(help='Bootstraps a new build.')
 @click.pass_context
 @click.option('--source-url', default=BuildUnitAllocator.DEFAULT_SRC_URL,
               help='URL for build sources.')
