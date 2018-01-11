@@ -14,17 +14,12 @@ except ImportError:
 def cli(ctx):
     setattr(ctx, 'conf', {})
 
-@cli.group()
-@click.pass_context
-def unit(ctx):
-    """bcpc-build-unit commands"""
-
-@unit.command(help='List build units')
-@click.pass_context
-def list(ctx):
-    pass
-
 ### add some subcommands ###
 
 from bcpc_build.cmd.bootstrap import bootstrap
+from bcpc_build.cmd.unit import cli as unit_cmds
+from bcpc_build.cmd.setup import setup
+
 cli.add_command(bootstrap)
+cli.add_command(unit_cmds, name='unit')
+cli.add_command(setup)

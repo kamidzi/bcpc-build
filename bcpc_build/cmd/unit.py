@@ -5,7 +5,7 @@ import shlex
 import subprocess
 import sys
 
-@click.group()
+@click.group(help='Manages build units.')
 @click.pass_context
 def cli(ctx):
     pass
