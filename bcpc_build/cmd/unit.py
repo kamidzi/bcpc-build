@@ -1,4 +1,5 @@
 from bcpc_build.build_unit import BuildUnitAllocator
+from bcpc_build.build_unit import NotImplementedError
 import click
 import os
 import shlex
@@ -19,15 +20,30 @@ def build(ctx, source_url):
     allocator.provision(build)
     click.echo(build.to_json())
 
+
+try:
+    import simplejson as json
+except ImportError:
+    import json
+class BuildUnitListingJSONFormat(object):
+    @staticmethod
+    def format(data):
+        return json.dumps(data, indent=2)
+
+
 @cli.command(help='List build units')
 @click.pass_context
-@click.option('--format', help='Listing format')
+@click.option('--format', help='Listing format', default='json')
 def list(ctx, format):
     # Quick and dirty
-    try:
-        import simplejson as json
-    except ImportError:
-        import json
+    formatters = {
+        'json': BuildUnitListingJSONFormat
+    }
         
     builds = os.listdir(BuildUnitAllocator.DEFAULT_BUILD_HOME)
-    click.echo(json.dumps(sorted(builds), indent=2))
+    try:
+        formatter = formatters[format]
+    except KeyError:
+        raise NotImplementedError('%s format' % format)
+
+    click.echo(formatter.format(sorted(builds)))
