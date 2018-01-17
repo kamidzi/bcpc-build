@@ -2,12 +2,10 @@ from bcpc_build.build_unit import BuildUnitAllocator
 import click
 import shlex
 import subprocess
-import sys
 try:
     import simplejson as json
 except ImportError:
     import json
-
 
 
 @click.command(help='Bootstraps a new build.')
@@ -36,11 +34,14 @@ def bootstrap(ctx, source_url, wait):
 
         # Need start_new_session to run in background?
         def handle_status(status):
-            if status.returncode == 0:
+            if status == 0:
                 sys.exit(0)
+            elif status < 0:
+                sys.exit('Build process killed with'
+                         ' signal %d' % (-1*status))
             else:
                 sys.exit('Build process exited with'
-                         ' status %d' % status.returncode)
+                         ' status %d' % status)
 
         while True:
             output = proc.stdout.readline().strip()
