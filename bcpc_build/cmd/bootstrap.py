@@ -2,6 +2,7 @@ from bcpc_build.build_unit import BuildUnitAllocator
 import click
 import shlex
 import subprocess
+import sys
 try:
     import simplejson as json
 except ImportError:
