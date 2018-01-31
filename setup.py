@@ -1,16 +1,44 @@
 from setuptools import setup, find_packages
+# from setuptools.config import read_configuration
+# process setup.cfg - for uses like `pip install .`
+# Assumes python3
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 
-setup(
-    name='bcpc-build',
-    version='0.1',
-    py_modules=find_packages(),
-    include_package_data=True,
-    install_requires=[
-        'Click',
-    ],
+setup_args = {}
+try:
+    config = configparser.ConfigParser()
+    config.read('setup.cfg')
+    # Need setuptools >=30.3.0 ?
+    # config = read_configuration('setup.cfg')
+    setup_args = dict(config['metadata'])
+except Exception as e:
+    import sys
+    print('Error reading setup.cfg: %s' % e, file=sys.stderr)
+
+setup_args.update(dict(
+    packages=find_packages(),
+    # TODO(kmidzi): offload
     entry_points='''
         [console_scripts]
-        bcpc-build-unit=bcpc_build.cmd.bcpc_build_unit:cli
-        bcpc-build=bcpc_build.cmd.bcpc_build:cli
-    ''',
-)
+        bcpc-build=bcpc_build.cmd.main:cli
+        bcpc-build-unit=bcpc_build.cmd.unit:cli
+    '''
+))
+
+
+def format_setup_args(conf):
+    try:
+        conf = conf.copy()
+        section = conf['classifiers']
+        new_vals = list(filter(None, section.split('\n')))
+        conf['classifiers'] = new_vals
+    except KeyError:
+        pass
+    return conf
+
+
+setup_args = format_setup_args(setup_args)
+setup(**setup_args)
