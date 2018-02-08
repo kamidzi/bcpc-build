@@ -1,6 +1,7 @@
 import os
 from bcpc_build.exceptions import *
 from bcpc_build import utils
+from bcpc_build.db.models.build_unit import BuildUnitBase
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
@@ -22,14 +23,9 @@ class NotImplementedError(Exception):
         super(self.__class__, self).__init__(*args, **kwargs)
 
 
-class BuildUnit(object):
-    def __init__(self, name, build_user, source_url):
-        self.build_dir = None
-        self.source_url = source_url
-        self.build_user = build_user
-        self.name = name
-        self.id = None
-
+class BuildUnit(BuildUnitBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
 
     def populate(self):
