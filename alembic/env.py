@@ -15,6 +15,7 @@ fileConfig(config.config_file_name)
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
+from bcpc_build.db.migration_types import UUIDType
 from bcpc_build.db.models.build_unit import BuildUnitBase
 target_metadata = [BuildUnitBase.metadata]
 
@@ -22,6 +23,19 @@ target_metadata = [BuildUnitBase.metadata]
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+# FIXME(kamidzi): rendering NOT working as expected
+# https://github.com/kvesteri/sqlalchemy-utils/issues/129#issuecomment-322734082
+def render_item(type_, obj, autogen_context):
+    """Apply custom rendering for selected items."""
+
+    if type_ == 'type' and isinstance(obj, UUIDType):
+        # add import for this type
+        autogen_context.imports.add("import uuid")
+        return "UUIDType(), default=uuid.uuid4"
+
+    # default rendering for other objects
+    return False
 
 
 def run_migrations_offline():
@@ -59,7 +73,8 @@ def run_migrations_online():
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata
+            target_metadata=target_metadata,
+            user_module_prefix='bcpc_build.db.migration_types.'
         )
 
         with context.begin_transaction():

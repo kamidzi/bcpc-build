@@ -1,14 +1,15 @@
-import sqlalchemy as sa
-from sqlalchemy import Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
-from bcpc_build.db.types import GUID
+from sqlalchemy import Column, Integer, String
+import sqlalchemy as sa
+from bcpc_build.db.migration_types import UUIDType
+import uuid
 
 Base = declarative_base()
 
 class BuildUnitBase(Base):
     __tablename__ = 'build_unit'
 
-    id = Column(GUID, primary_key=True)
+    id = Column(UUIDType(), primary_key=True, default=uuid.uuid4)
     build_dir = Column(sa.Unicode(200), nullable=False)
     build_user = Column(sa.Unicode(64), nullable=False)
     description = Column(sa.Unicode(200))
