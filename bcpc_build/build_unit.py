@@ -1,17 +1,22 @@
-import os
-from bcpc_build.exceptions import *
-from bcpc_build import utils
 from bcpc_build.db.models.build_unit import BuildUnitBase
+from bcpc_build.exceptions import *
+from bcpc_build import config
+from bcpc_build import utils
+from collections import OrderedDict
+from functools import total_ordering
 from pwd import getpwnam
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from subprocess import check_output
 from textwrap import dedent
 import logging
 import os
+import shortuuid
 import shlex
 import shutil
-import urllib.parse
 import string
 import sys
+import urllib.parse
 try:
     import simplejson as json
 except ImportError:
@@ -23,10 +28,49 @@ class NotImplementedError(Exception):
         super(self.__class__, self).__init__(*args, **kwargs)
 
 
+@total_ordering
 class BuildUnit(BuildUnitBase):
+    __jsonattrs__ = (
+        'name',
+        'source_url',
+        'build_user',
+        'build_dir',
+    )
+
+    @classmethod
+    def get_json_dict(cls, bunit):
+        d = OrderedDict({'id': str(bunit.id)})
+        d.update(OrderedDict(
+            map(lambda k: (k, getattr(bunit, k)), cls.__jsonattrs__))
+        )
+        # FIXME(kmidzi)
+        return d
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
+
+    def __eq__(self, other):
+        get_attrs = self.__class__.get_json_dict
+        self_attrs = get_attrs(self)
+        other_attrs = get_attrs(other)
+        return self_attrs == other_attrs
+
+    def __lt__(self, other):
+        def name_key(obj):
+            try:
+                name = obj.name
+                parts = name.split('.')
+                key = (int(parts[-1]), name)
+            except ValueError:
+                key = (sys.maxsize, name)
+            except NameError:
+                key = (obj,)
+            return key
+
+        lval = tuple([*name_key(self), self.build_user])
+        rval = tuple([*name_key(other), self.build_user])
+        return lval < rval
 
     def populate(self):
         self.logger.info('Populating build unit...')
@@ -135,13 +179,7 @@ class BuildUnit(BuildUnitBase):
 
     def to_json(self):
         indent = 2
-        info = {
-            'build_dir': self.build_dir or self.get_build_path(),
-            'source_url': self.source_url or '',
-            'build_user': self.build_user or '',
-            'name': self.name or '',
-            'id': self.id or '',
-        }
+        info = self.get_json_dict(self)
         return json.dumps(info, indent=2)
 
 
@@ -156,6 +194,16 @@ class BuildUnitAllocator(object):
         self._conf.setdefault('build_home', self.DEFAULT_BUILD_HOME)
         self._conf.setdefault('src_url', self.DEFAULT_SRC_URL)
         self._logger = logging.getLogger(__name__)
+        self._session = None
+
+    @property
+    def session(self):
+        if self._session is None:
+            engine = create_engine(config.db.url)
+            conn = engine.connect()
+            Session = sessionmaker(bind=conn)
+            self._session = Session()
+        return self._session
 
     @property
     def conf(self):
@@ -179,7 +227,7 @@ class BuildUnitAllocator(object):
             create_build_home()
 
     # TODO(kamidzi): move me
-    def list_build_areas(self):
+    def _list_build_areas(self):
         # TODO(kmidzi): should this return [] ???
         try:
             return os.listdir(self.conf.get('build_home'))
@@ -194,21 +242,20 @@ class BuildUnitAllocator(object):
     def allocate(self, *args, **kwargs):
         kwargs = kwargs.copy()
         build_user = self.allocate_build_user(self.generate_build_user_name())
-        build_dir = self.allocate_build_dir()
+        build_dir = self.allocate_build_dir(build_user=build_user)
         kwargs.setdefault('source_url', self.DEFAULT_SRC_URL)
         kwargs.setdefault('build_user', build_user)
+        kwargs.setdefault('build_dir', build_dir)
         kwargs.setdefault('name', build_user)
         bunit = BuildUnit(**kwargs)
+        # flush it here
+        self.session.add(bunit)
+        self.session.commit()
         return bunit
 
     def generate_build_user_name(self):
-        dirs = self.list_build_areas()
-       # get the suffixes
-        def split_suffix(x):
-            return int(x.split('.')[-1])
-
-        latest = 0 if not dirs else max(map(split_suffix, dirs))
-        new_id = latest + 1
+        id_len = 8
+        new_id = shortuuid.uuid()[0:id_len]
         return ''.join([self.BUILD_DIR_PREFIX, str(new_id)])
 
     def allocate_build_user(self, username):
@@ -229,5 +276,5 @@ class BuildUnitAllocator(object):
 
     def allocate_build_dir(self, *args, **kwargs):
         """Allocates a Build Unit data directory"""
-        build_user = self.generate_build_user_name()
+        build_user = kwargs.get('build_user', self.generate_build_user_name())
         return os.path.join(self.conf.get('build_home'), build_user)
