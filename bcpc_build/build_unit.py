@@ -30,18 +30,20 @@ class NotImplementedError(Exception):
 
 @total_ordering
 class BuildUnit(BuildUnitBase):
-    __jsonattrs__ = (
+    _jsonattrs_ = (
         'name',
         'source_url',
         'build_user',
         'build_dir',
     )
 
+    _attrs_ = tuple(['id'] + list(_jsonattrs_))
+
     @classmethod
     def get_json_dict(cls, bunit):
         d = OrderedDict({'id': str(bunit.id)})
         d.update(OrderedDict(
-            map(lambda k: (k, getattr(bunit, k)), cls.__jsonattrs__))
+            map(lambda k: (k, getattr(bunit, k)), cls._jsonattrs_))
         )
         # FIXME(kmidzi)
         return d
