@@ -10,6 +10,8 @@ def useradd(username, *args, **kwargs):
     kwargs = kwargs.copy()
     kwargs['args'] = '-m -r -U '
     kwargs['username'] = username
+    if 'shell' in kwargs:
+        kwargs['args'] += ('-s %s ' % kwargs.pop('shell'))
     if 'homedir_prefix' in kwargs:
         kwargs['args'] += ('-d ' + user_homedir())
     cmd = 'useradd {args} {username}'.format(**kwargs)

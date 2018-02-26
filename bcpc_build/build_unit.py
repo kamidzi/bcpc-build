@@ -190,6 +190,7 @@ class BuildUnitAllocator(object):
     DEFAULT_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
     BUILD_DIR_PREFIX = 'chef-bcpc.'
     DEFAULT_BUILD_HOME = '/build'
+    DEFAULT_SHELL = '/bin/bash'
 
     def __init__(self, *args, **kwargs):
         self._conf = kwargs.get('conf', {})
@@ -269,7 +270,8 @@ class BuildUnitAllocator(object):
             self.logger.info('Creating build user {} ...'.format(username))
             try:
                 # TODO(kmidzi): allow passing of mode
-                utils.useradd(username, homedir_prefix=self.conf.get('build_home'))
+                utils.useradd(username, shell=self.DEFAULT_SHELL,
+                              homedir_prefix=self.conf.get('build_home'))
             except Exception as e:
                 print('Could not create user {}. Check euid in calling'
                       ' environment?'.format(username), file=sys.stderr)
