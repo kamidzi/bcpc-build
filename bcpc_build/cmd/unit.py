@@ -113,8 +113,7 @@ def build(ctx, source_url):
     allocator.provision(build)
     click.echo(build.to_json())
 
-
-@cli.command(help='Show build unit information')
+@cli.command(help='Show build unit information.')
 @click.pass_context
 @click.argument('id')
 @click.option('--format', help='Display format', default='table')
@@ -133,7 +132,43 @@ def show(ctx, id, format):
     except KeyError:
         raise NotImplementedError('%s format' % format)
 
-@cli.command(help='List build units')
+@cli.command(help='Start a shell in the build unit.')
+@click.pass_context
+@click.argument('id')
+def shell(ctx, id):
+    CalledProcessError = subprocess.CalledProcessError
+    sh = '/bin/bash'
+    env = {
+        'SHELL': sh,
+    }
+    def _envargs():
+        pairs = ["%s='%s'" % (k, env[k]) for k in env.keys()]
+        return ' '.join(pairs)
+
+    cmdlist = [
+        "env {envargs} sudo -n -p 'Password for %p' login -f {user}",
+        "su -c 'login -f {user}'",
+        "env {envargs} sudo -p 'Password for %u' -u {user} -",
+    ]
+    session = utils.Session()
+    try:
+        bunit = session.query(BuildUnit).get(id)
+        user = bunit.build_user
+        for c in cmdlist:
+            r = 0
+            cmd = shlex.split(c.format(user=user, envargs=_envargs()))
+            r = subprocess.call(cmd)
+            if r == 0:
+                break
+        if r != 0:
+            msg = ('Could not spawn shell:'
+                   ' "{cmd}" returned with non-zero status {ret}'.format(
+                       cmd=' '.join(cmd), ret=r))
+            click.echo(msg, err=True)
+    except sa.exc.SQLAlchemyError:
+        click.echo("No such unit with id '%s'" % id, err=True)
+
+@cli.command(help='List build units.')
 @click.pass_context
 @click.option('--format', help='Listing format', default='table')
 @click.option('--long', help='List all fields', is_flag=True, default=False)
