@@ -1,9 +1,11 @@
 from bcpc_build import config
+from .exceptions import Abort
 from pathlib import Path
 import click
 import shlex
 import subprocess
 import sys
+
 
 @click.command()
 @click.option('--force', is_flag=True,
@@ -17,7 +19,7 @@ def init(ctx, force):
         try:
             path.mkdir(mode, exist_ok=True)
         except FileExistsError as e:
-            sys.exit(click.echo('Some error occurred: %s' % e, err=True))
+            raise Abort('Some error occurred: %s' % e, err=True)
         return path
 
     def _create_conf(dirpath, force=False):
@@ -26,7 +28,7 @@ def init(ctx, force):
         try:
             path.touch(mode, exist_ok=force)
         except FileExistsError as e:
-            sys.exit(click.echo('Some error occurred: %s' % e, err=True))
+            raise Abort('Some error occurred: %s' % e, err=True)
         return path.as_posix()
 
     d = _mk_user_conf_dir(force)
