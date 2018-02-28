@@ -19,7 +19,8 @@ def cli(ctx):
 from bcpc_build.cmd.bootstrap import bootstrap
 from bcpc_build.cmd.unit import cli as unit_cmds
 from bcpc_build.cmd.setup import setup
+from bcpc_build.cmd.setup import init
 
 cli.add_command(bootstrap)
 cli.add_command(unit_cmds, name='unit')
-cli.add_command(setup)
+cli.add_command(init)
