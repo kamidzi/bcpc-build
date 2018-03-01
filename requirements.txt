@@ -16,3 +16,5 @@ shortuuid==0.5.0
 SQLAlchemy-Utils==0.32.21
 terminaltables==3.1.0
 ## The following requirements were added by pip freeze:
+furl==1.0.1
+orderedmultidict==0.7.11

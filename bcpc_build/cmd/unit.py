@@ -179,12 +179,15 @@ def list(ctx, format, long):
         'table': BuildUnitListingTableFormat,
     }
     session = utils.Session()
-    builds = session.query(BuildUnit)
-
-    if not builtins.list(builds):
-        return
     try:
+        builds = session.query(BuildUnit)
+
+        if not builtins.list(builds):
+            return
         formatter = formatters[format]
+        click.echo(formatter.format(sorted(builds), long=long))
+    except sa.exc.SQLAlchemyError as e:
+        click.echo('Something went wrong: %s' % e, err=True)
+        raise click.Abort
     except KeyError:
         raise NotImplementedError('%s format' % format)
-    click.echo(formatter.format(sorted(builds), long=long))

@@ -25,6 +25,7 @@ setup_args.update(dict(
         [console_scripts]
         bcpc-build=bcpc_build.cmd.main:cli
         bcpc-build-unit=bcpc_build.cmd.unit:cli
+        bcpc-build-db=bcpc_build.cmd.db:cli
     '''
 ))
 
