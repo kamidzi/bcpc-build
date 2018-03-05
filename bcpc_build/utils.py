@@ -3,6 +3,13 @@ import os
 from subprocess import check_output
 
 
+def userdel(username, *args, **kwargs):
+    kwargs = kwargs.copy()
+    kwargs['args'] = '-r -f '
+    kwargs['username'] = username
+    cmd = 'userdel {args} {username}'.format(**kwargs)
+    return check_output(shlex.split(cmd))
+
 def useradd(username, *args, **kwargs):
     def user_homedir():
         return os.path.join(kwargs['homedir_prefix'], username)

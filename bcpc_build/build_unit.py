@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from subprocess import check_output
 from textwrap import dedent
+from psutil import process_iter
 import logging
 import os
 import shortuuid
@@ -21,6 +22,42 @@ try:
     import simplejson as json
 except ImportError:
     import json
+
+
+import signal
+import psutil
+# https://psutil.readthedocs.io/en/latest/#kill-process-tree
+def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
+                   timeout=None, on_terminate=None):
+    """Kill a process tree (including grandchildren) with signal
+    "sig" and return a (gone, still_alive) tuple.
+    "on_terminate", if specified, is a callabck function which is
+    called as soon as a child terminates.
+    """
+    if pid == os.getpid():
+        raise RuntimeError("I refuse to kill myself")
+    try:
+        parent = psutil.Process(pid)
+        children = parent.children(recursive=True)
+        if include_parent:
+            children.append(parent)
+        for p in children:
+            p.send_signal(sig)
+        gone, alive = psutil.wait_procs(children, timeout=timeout,
+                                        callback=on_terminate)
+        if alive:
+            # send SIGKILL
+            for p in alive:
+                print("process {} survived SIGTERM; trying SIGKILL" % p)
+                p.kill()
+            gone, alive = psutil.wait_procs(alive, timeout=timeout, callback=on_terminate)
+            if alive:
+                # give up
+                for p in alive:
+                    print("process {} survived SIGKILL; giving up" % p)
+        return (gone, alive)
+    except psutil.NoSuchProcess as e:
+        return (None, None)
 
 
 @total_ordering
@@ -236,6 +273,34 @@ class BuildUnitAllocator(object):
         build.populate()
         build.configure()
         return build
+
+    def destroy(self, bunit):
+        # find processes
+        # kill processes
+        # userdel -r
+        def get_procs(user):
+            p_attrs = ['pid', 'username']
+            plist = list(filter(lambda p: p.info['username'] == user,
+                                process_iter(p_attrs)))  
+            return plist
+
+        def kill_user_procs(user):
+            plist = get_procs(user)
+            timeout = 3
+            for proc in plist:
+                # multiproc here?
+                kill_proc_tree(proc.info['pid'])
+
+        def remove_user(user):
+            kill_user_procs(user)
+            utils.userdel(user)
+
+        remove_user(bunit.build_user)
+        self._deallocate(bunit)
+
+    def _deallocate(self, bunit):
+        self.session.delete(bunit)
+        self.session.commit()
 
     def allocate(self, *args, **kwargs):
         kwargs = kwargs.copy()

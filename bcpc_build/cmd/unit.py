@@ -1,5 +1,4 @@
 from bcpc_build.build_unit import BuildUnitAllocator
-from bcpc_build.build_unit import NotImplementedError
 from bcpc_build.build_unit import BuildUnit
 from bcpc_build.db import utils
 from terminaltables import AsciiTable
@@ -167,6 +166,18 @@ def shell(ctx, id):
             click.echo(msg, err=True)
     except sa.exc.SQLAlchemyError:
         click.echo("No such unit with id '%s'" % id, err=True)
+
+@cli.command(help='Destroy build unit.')
+@click.pass_context
+@click.argument('id')
+def destroy(ctx, id):
+    try:
+        allocator = BuildUnitAllocator()
+        bunit = allocator.session.query(BuildUnit).get(id)
+        allocator.destroy(bunit)
+    except Exception as e:
+        click.echo(e)
+        raise click.Abort
 
 @cli.command(help='List build units.')
 @click.pass_context

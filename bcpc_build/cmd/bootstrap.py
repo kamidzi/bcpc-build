@@ -1,4 +1,6 @@
 from bcpc_build.build_unit import BuildUnitAllocator
+from bcpc_build.cmd.exceptions import CommandNotImplementedError
+from bcpc_build.exceptions import AllocationError
 import click
 import shlex
 import subprocess
@@ -20,9 +22,12 @@ def bootstrap(ctx, source_url, wait):
     conf = ctx.params.copy()
     allocator = BuildUnitAllocator(conf=conf)
     allocator.setup()
-    build = allocator.allocate()
-    allocator.provision(build)
-    info = json.loads(build.to_json())
+    try:
+        build = allocator.allocate()
+        allocator.provision(build)
+        info = json.loads(build.to_json())
+    except AllocationError as e:
+        allocator._deallocate(build)
 
     def do_bootstrap(info):
         # Print the build_unit info

@@ -7,7 +7,7 @@ class Abort(click.Abort):
         super().__init__()
 
 
-class CommandNotImplementedError(click.Abort, exceptions.NotImplementedError):
+class CommandNotImplementedError(click.Abort, NotImplementedError):
     _MESSAGE = '%s is not implemented!'
 
     def __init__(self, target, *args, **kwargs):
