@@ -18,6 +18,8 @@ except ImportError:
 @click.option('--wait/--no-wait', default=False,
               help='Wait for bootstrap to complete in foreground.')
 def bootstrap(ctx, source_url, wait):
+    if not wait:
+        raise CommandNotImplementedError('bootstrap --no-wait')
     # TODO(kamidzi): do this properly
     conf = ctx.params.copy()
     allocator = BuildUnitAllocator(conf=conf)
