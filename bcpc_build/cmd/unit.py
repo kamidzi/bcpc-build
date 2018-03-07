@@ -124,10 +124,13 @@ def show(ctx, id, format):
     session = utils.Session()
     try:
         bunit = session.query(BuildUnit).get(id)
+        if bunit is None:
+            msg = "No such unit with id '%s'" % id
+            raise click.ClickException(msg)
         formatter = formatters[format]
         click.echo(formatter.format(bunit))
-    except sa.exc.SQLAlchemyError:
-        click.echo("No such unit with id '%s'" % id, err=True)
+    except sa.exc.SQLAlchemyError as e:
+        raise click.ClickException(e)
     except KeyError:
         raise NotImplementedError('%s format' % format)
 
@@ -181,7 +184,7 @@ def destroy(ctx, id):
 
 @cli.command(help='List build units.')
 @click.pass_context
-@click.option('--format', help='Listing format', default='table')
+@click.option('--format', '-f', help='Listing format', default='table')
 @click.option('--long', help='List all fields', is_flag=True, default=False)
 def list(ctx, format, long):
     import builtins
