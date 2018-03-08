@@ -1,6 +1,8 @@
 from bcpc_build.build_unit import BuildUnitAllocator
+from bcpc_build.build_unit import DEFAULT_ALLOCATOR
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
 from bcpc_build.exceptions import AllocationError
+from configparser import ConfigParser
 import click
 import shlex
 import subprocess
@@ -13,20 +15,40 @@ except ImportError:
 
 @click.command(help='Bootstraps a new build.')
 @click.pass_context
-@click.option('--source-url', default=BuildUnitAllocator.DEFAULT_SRC_URL,
-              help='URL for build sources.')
+@click.option('--config-file', '-c', type=click.File(),
+              help='Config file for bootstrap operation.')
+@click.option('--source-url', help='URL for build sources.')
+@click.option('--strategy',
+              help='Build strategy.',
+              type=click.Choice(BuildUnitAllocator.BUILD_STRATEGY_NAMES),
+              default=BuildUnitAllocator.BUILD_STRATEGY_DEFAULT)
 @click.option('--wait/--no-wait', default=False,
               help='Wait for bootstrap to complete in foreground.')
-def bootstrap(ctx, source_url, wait):
+def bootstrap(ctx, config_file, source_url, strategy, wait):
+    def _parse_conf(conffile):
+        cfg = ConfigParser()
+        cfg.read_file(conffile)
+        ret = {}
+        for k, sect in cfg.items():
+            ret[k] = dict(sect.items())
+        return ret
+
+    # TODO(kamidzi): do this properly
+    # Get the bootstrap config and move DEFAULT keys to toplevel with other
+    # params from click context
+    conf = ctx.params.copy()
+    _conf = _parse_conf(config_file) if config_file else {}
+    conf.update(_conf.pop('DEFAULT', {}))
+    conf.update(_conf)
     if not wait:
         raise CommandNotImplementedError('bootstrap --no-wait')
-    # TODO(kamidzi): do this properly
-    conf = ctx.params.copy()
-    allocator = BuildUnitAllocator(conf=conf)
+    allocator = BuildUnitAllocator.get_allocator(conf=conf)
     allocator.setup()
     try:
-        build = allocator.allocate()
-        allocator.provision(build)
+        if not source_url:
+            source_url = allocator.DEFAULT_SRC_URL
+        build = allocator.allocate(source_url=source_url)
+        allocator.provision(build, conf=conf)
         info = json.loads(build.to_json())
     except AllocationError as e:
         allocator._deallocate(build)

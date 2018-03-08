@@ -1,0 +1,3 @@
+[credentials]
+username = someuser
+password = a_read_only_token

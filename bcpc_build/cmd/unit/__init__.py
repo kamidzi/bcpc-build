@@ -109,7 +109,9 @@ def cli(ctx):
 
 @cli.command(help='Initiate a build of a unit.')
 @click.pass_context
-@click.option('--source-url', help='Source url for the build.', required=True)
+@click.option('--source-url', help='Source url for the build.')
+@click.option('--strategy', help='Build strategy.',
+              type=click.Choice(BuildUnitAllocator.BUILD_STRATEGY_NAMES))
 def build(ctx, source_url):
     allocator = BuildUnitAllocator()
     allocator.setup()
