@@ -1,9 +1,12 @@
-from bcpc_build.build_unit import BuildUnitAllocator
 from bcpc_build.build_unit import BuildUnit
+from bcpc_build.build_unit import BuildUnitAllocator
+from bcpc_build.cmd.exceptions import CommandNotImplementedError
 from bcpc_build.db import utils
+from .config import cli as config_cli
+from pathlib import Path
 from terminaltables import AsciiTable
-import click
 import abc
+import click
 import os
 import shlex
 import sqlalchemy as sa
@@ -53,7 +56,7 @@ class BuildUnitShowTableFormat(ShowFormat):
             return odict([(k, str(getattr(obj, k))) for k in attrs])
 
         def generate_tdata(_data):
-            return [header] + [(k,v) for k,v in render(_data).items()]
+            return [header] + [(k, v) for k, v in render(_data).items()]
 
         tdata = generate_tdata(data)
         table = AsciiTable(tdata)
@@ -74,7 +77,9 @@ class BuildUnitListingTableFormat(ListingFormat):
 
         def generate_tdata(_data):
             import builtins
-            return [header] + builtins.list(map(lambda x: render_row(x), _data))
+            rows = [header]
+            rows += builtins.list(map(lambda x: render_row(x), _data))
+            return rows
 
         tdata = generate_tdata(data)
         table = AsciiTable(tdata)
@@ -112,6 +117,7 @@ def build(ctx, source_url):
     allocator.provision(build)
     click.echo(build.to_json())
 
+
 @cli.command(help='Show build unit information.')
 @click.pass_context
 @click.argument('id')
@@ -134,6 +140,7 @@ def show(ctx, id, format):
     except KeyError:
         raise NotImplementedError('%s format' % format)
 
+
 @cli.command(help='Start a shell in the build unit.')
 @click.pass_context
 @click.argument('id')
@@ -143,6 +150,7 @@ def shell(ctx, id):
     env = {
         'SHELL': sh,
     }
+
     def _envargs():
         pairs = ["%s='%s'" % (k, env[k]) for k in env.keys()]
         return ' '.join(pairs)
@@ -170,6 +178,7 @@ def shell(ctx, id):
     except sa.exc.SQLAlchemyError:
         click.echo("No such unit with id '%s'" % id, err=True)
 
+
 @cli.command(help='Destroy build unit.')
 @click.pass_context
 @click.argument('id')
@@ -181,6 +190,7 @@ def destroy(ctx, id):
     except Exception as e:
         click.echo(e)
         raise click.Abort
+
 
 @cli.command(help='List build units.')
 @click.pass_context
@@ -205,3 +215,11 @@ def list(ctx, format, long):
         raise click.Abort
     except KeyError:
         raise NotImplementedError('%s format' % format)
+
+
+class NotFoundError(click.ClickException):
+    def __init__(id, *args, **kwargs):
+        super().__init__("No such unit with id '%s'" % id)
+
+
+cli.add_command(config_cli, name='config')

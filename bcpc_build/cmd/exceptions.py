@@ -1,4 +1,3 @@
-from bcpc_build import exceptions
 import click
 
 class Abort(click.Abort):

@@ -17,10 +17,10 @@ def cli(ctx):
 ### add some subcommands ###
 
 from bcpc_build.cmd.bootstrap import bootstrap
-from bcpc_build.cmd.unit import cli as unit_cmds
-from bcpc_build.cmd.setup import setup
-from bcpc_build.cmd.setup import init
 from bcpc_build.cmd.db import cli as db_cmds
+from bcpc_build.cmd.setup import init
+from bcpc_build.cmd.setup import setup
+from bcpc_build.cmd.unit import cli as unit_cmds
 
 cli.add_command(init)
 cli.add_command(bootstrap)
