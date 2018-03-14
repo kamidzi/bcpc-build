@@ -32,8 +32,6 @@ class BuildUnit(BuildUnitBase):
         'source_url',
         'build_user',
         'build_dir',
-        'created_at',
-        'updated_at'
     )
 
     _attrs_ = tuple(['id'] + list(_jsonattrs_))
