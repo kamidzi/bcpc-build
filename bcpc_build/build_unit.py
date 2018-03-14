@@ -1,3 +1,4 @@
+from abc import ABC
 from bcpc_build.db.models.build_unit import BuildUnitBase
 from bcpc_build.exceptions import *
 from bcpc_build import config
@@ -93,12 +94,13 @@ class AllocationError(RuntimeError):
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
 
-class BuildUnitAllocator(object):
+class BuildUnitAllocator(ABC):
     BUILD_DIR_PREFIX = 'chef-bcpc.'
     DEFAULT_BUILD_HOME = '/build'
     DEFAULT_SHELL = '/bin/bash'
     BUILD_STRATEGY_NAMES = ['v7', 'v8']
     BUILD_STRATEGY_DEFAULT = 'v7'
+    SRC_DEPENDS = None
 
     def __init__(self, *args, **kwargs):
         self._conf = kwargs.get('conf', {})
@@ -166,6 +168,7 @@ class BuildUnitAllocator(object):
         user, group = [bunit.build_user]*2
         # local certificate store in build area
         dest = os.path.join(basedir, 'cacerts')
+
         def install_copy(src, dst, *d, follow_symlinks=True):
             shutil.copy2(src, dst, *d, follow_symlinks=follow_symlinks)
             # also chown the files
@@ -179,6 +182,96 @@ class BuildUnitAllocator(object):
         except shutil.Error as e:
             bunit.logger.error('Could not install certificates.')
             sys.exit(e)
+
+    def configure(self, bunit, *args, **kwargs):
+        """Configures the build unit."""
+        basedir = bunit.get_build_path()
+        workdir = os.path.join(basedir, 'chef-bcpc')
+        conf_dir = os.path.join(workdir, 'bootstrap', 'config')
+        conffile = os.path.join(conf_dir, 'bootstrap_config.sh.overrides')
+        logger = bunit.logger
+
+        tmpl_src = self.CONF_TEMPLATE
+        tmpl = string.Template(tmpl_src)
+        # TODO(kmidzi): get from somewhere??
+        values = {
+            'build_dir': basedir,
+            'http_proxy_url': 'http://proxy.example.com:3128',
+            'https_proxy_url': 'http://proxy.example.com:3128',
+        }
+        configuration = tmpl.substitute(values)
+        with open(conffile, 'w') as c:
+            logger.info('Writing build configuration to %s' % conffile)
+            logger.debug({'configuration': configuration})
+            c.write(configuration)
+            perms = {'user': bunit.name, 'group': bunit.name}
+            logger.debug('Setting permissions {perms} on configuration'
+                         ' file at {filename}'.format(perms=perms,
+                                                      filename=conffile))
+            shutil.chown(conffile, **perms)
+
+        self.install_certs(bunit)
+
+    @classmethod
+    def populate(cls, bunit, conf={}, *args, **kwargs):
+        src_depends = cls.SRC_DEPENDS or {}
+        src_url = bunit.source_url
+        build_path = bunit.get_build_path()
+        logger = bunit.logger
+
+        # FIXME(kamidzi): git-credential helper?
+        def git_args(url):
+            url = furl(url)
+            path = url.path
+            scheme = url.scheme
+            # Translate branch url to git arguments
+            args = {}
+            args['git'] = '-C %s' % build_path
+            if scheme in conf:
+                proxy = conf[scheme].get('proxy')
+                if proxy:
+                    args['git'] += ' -c %s.proxy="%s"' % (scheme, proxy)
+
+            if 'credentials' in conf:
+                logger.debug('Detected credentials in configuration')
+                creds = conf['credentials']
+                url.set(username=creds['username'],
+                        password=creds['password'])
+            args['url'] = url.url
+            try:
+                path, branch = str(path).split('/tree/')
+                logger.debug('Detected branch %s from source url' % branch)
+                args['clone'] = '-b %s' % branch
+                # replace the path to exclude branch
+                url.set(path=path)
+                args['url'] = url.url
+            except (ValueError,) as e:
+                logger.debug(e)
+            return args
+
+        def clone_cmd(src_url, dest=''):
+            args = git_args(src_url)
+            cmd = ("su -c 'git {git_args} clone {clone_args} {url} {dest}' "
+                   "{username}").format(git_args=args.get('git', ''),
+                                        clone_args=args.get('clone', ''),
+                                        url=args.get('url'),
+                                        dest=dest,
+                                        username=bunit.build_user)
+            logger.debug('Generated `{}` from src_url={}'.format(cmd, src_url))
+            return cmd
+
+        def process_deps():
+            for name in src_depends:
+                url = src_depends[name]
+                # Suspect logger...
+                logger.debug('Processing dependency: {} => {}'
+                             ''.format(name, url))
+                cmd = clone_cmd(url, name)
+                check_output(shlex.split(cmd))
+
+        process_deps()
+        cmd = clone_cmd(src_url, 'chef-bcpc')
+        check_output(shlex.split(cmd))
 
     def provision(self, build, *args, **kwargs):
         conf = kwargs.get('conf', {}).copy()
@@ -257,222 +350,63 @@ class BuildUnitAllocator(object):
 
 class V7BuildUnitAllocator(BuildUnitAllocator):
     DEFAULT_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
+    CONF_TEMPLATE = dedent("""\
+        export BCPC_VM_DIR=${build_dir}/bcpc-vms
+        export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
+        export BOOTSTRAP_ADDITIONAL_CACERTS_DIR=${build_dir}/cacerts
+        export BOOTSTRAP_APT_MIRROR=
+        export BOOTSTRAP_CACHE_DIR=${build_dir}/.bcpc-cache
+        export BOOTSTRAP_CHEF_DO_CONVERGE=1
+        export BOOTSTRAP_CHEF_ENV=Test-Laptop-Vagrant
+        export BOOTSTRAP_HTTP_PROXY_URL=${http_proxy_url}
+        export BOOTSTRAP_HTTPS_PROXY_URL=${https_proxy_url}
+        export BOOTSTRAP_VM_CPUS=2
+        export BOOTSTRAP_VM_DRIVE_SIZE=20480
+        export BOOTSTRAP_VM_MEM=2048
+        export CLUSTER_VM_CPUS=2
+        export CLUSTER_VM_DRIVE_SIZE=20480
+        export CLUSTER_VM_MEM=3072
+        export FILECACHE_MOUNT_POINT=/chef-bcpc-files
+        export MONITORING_NODES=0
+        export REPO_MOUNT_POINT=/chef-bcpc-host
+        export VM_SWAP_SIZE=8192
+    """)
 
-    @staticmethod
-    def populate(bunit, conf={}, *args, **kwargs):
-        src_url = bunit.source_url
-        build_path = bunit.get_build_path()
-
-        # FIXME(kamidzi): git-credential helper?
-        def git_args(url):
-            url = furl(url)
-            path = url.path
-            scheme = url.scheme
-            # Translate branch url to git arguments
-            args = {}
-            args['git'] = '-C %s' % build_path
-            if scheme in conf:
-                proxy = conf[scheme].get('proxy')
-                if proxy:
-                    args['git'] += ' -c %s.proxy="%s"' % (scheme, proxy)
-
-            if 'credentials' in conf:
-                bunit.logger.debug('Detected credentials in configuration')
-                creds = conf['credentials']
-                url.set(username=creds['username'],
-                        password=creds['password'])
-            args['url'] = url.url
-            try:
-                path, branch = str(path).split('/tree/')
-                bunit.logger.debug('Detected branch %s from source url' % branch)
-                args['clone'] = '-b %s' % branch
-                # replace the path to exclude branch
-                url.set(path=path)
-                args['url'] = url.url
-            except (ValueError,) as e:
-                bunit.logger.debug(e)
-            return args
-
-        args = git_args(src_url)
-        cmd = ("su -c 'git {git_args} clone {clone_args} {url} chef-bcpc' "
-               "{username}").format(git_args=args.get('git', ''),
-                                    clone_args=args.get('clone', ''),
-                                    url=args.get('url'),
-                                    username=bunit.build_user)
-        check_output(shlex.split(cmd))
-
-    def configure(self, bunit, *args, **kwargs):
-        """Configures the build unit."""
-        basedir = bunit.get_build_path()
-        workdir = os.path.join(basedir, 'chef-bcpc')
-        conf_dir = os.path.join(workdir, 'bootstrap', 'config')
-        conffile = os.path.join(conf_dir, 'bootstrap_config.sh.overrides')
-        logger = bunit.logger
-
-        tmpl_src = dedent("""\
-            export BCPC_VM_DIR=${build_dir}/bcpc-vms
-            export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
-            export BOOTSTRAP_ADDITIONAL_CACERTS_DIR=${build_dir}/cacerts
-            export BOOTSTRAP_APT_MIRROR=
-            export BOOTSTRAP_CACHE_DIR=${build_dir}/.bcpc-cache
-            export BOOTSTRAP_CHEF_DO_CONVERGE=1
-            export BOOTSTRAP_CHEF_ENV=Test-Laptop-Vagrant
-            export BOOTSTRAP_HTTP_PROXY_URL=${http_proxy_url}
-            export BOOTSTRAP_HTTPS_PROXY_URL=${https_proxy_url}
-            export BOOTSTRAP_VM_CPUS=2
-            export BOOTSTRAP_VM_DRIVE_SIZE=20480
-            export BOOTSTRAP_VM_MEM=2048
-            export CLUSTER_VM_CPUS=2
-            export CLUSTER_VM_DRIVE_SIZE=20480
-            export CLUSTER_VM_MEM=3072
-            export FILECACHE_MOUNT_POINT=/chef-bcpc-files
-            export MONITORING_NODES=0
-            export REPO_MOUNT_POINT=/chef-bcpc-host
-            export VM_SWAP_SIZE=8192
-        """)
-        tmpl = string.Template(tmpl_src)
-        # TODO(kmidzi): get from somewhere??
-        values = {
-            'build_dir': basedir,
-            'http_proxy_url': 'http://proxy.example.com:3128',
-            'https_proxy_url': 'http://proxy.example.com:3128',
-        }
-        configuration = tmpl.substitute(values)
-        with open(conffile, 'w') as c:
-            logger.info('Writing build configuration to %s' % conffile)
-            logger.debug({'configuration': configuration})
-            c.write(configuration)
-            perms = {'user': bunit.name, 'group': bunit.name}
-            logger.debug('Setting permissions {perms} on configuration'
-                         ' file at {filename}'.format(perms=perms,
-                                                      filename=conffile))
-            shutil.chown(conffile, **perms)
-
-        self.install_certs(bunit)
 
 
 class V8BuildUnitAllocator(BuildUnitAllocator):
     DEFAULT_SRC_URL =\
         'https://github.com/bloomberg/BCPC/chef-bcpc/tree/v8/xenial'
-
-    @staticmethod
-    def populate(bunit, conf={}, *args, **kwargs):
-        # TODO(kamidzi): move me
-        src_depends = {
-            'leafy-spines': 'https://repo.example.com/private/leafy-spines'
-        }
-        src_url = bunit.source_url
-        build_path = bunit.get_build_path()
-        logger = bunit.logger
-
-        # FIXME(kamidzi): git-credential helper?
-        def git_args(url):
-            url = furl(url)
-            path = url.path
-            scheme = url.scheme
-            # Translate branch url to git arguments
-            args = {}
-            args['git'] = '-C %s' % build_path
-            if scheme in conf:
-                proxy = conf[scheme].get('proxy')
-                if proxy:
-                    args['git'] += ' -c %s.proxy="%s"' % (scheme, proxy)
-
-            if 'credentials' in conf:
-                logger.debug('Detected credentials in configuration')
-                creds = conf['credentials']
-                url.set(username=creds['username'],
-                        password=creds['password'])
-            args['url'] = url.url
-            try:
-                path, branch = str(path).split('/tree/')
-                logger.debug('Detected branch %s from source url' % branch)
-                args['clone'] = '-b %s' % branch
-                # replace the path to exclude branch
-                url.set(path=path)
-                args['url'] = url.url
-            except (ValueError,) as e:
-                logger.debug(e)
-            return args
-
-        def clone_cmd(src_url, dest=''):
-            args = git_args(src_url)
-            cmd = ("su -c 'git {git_args} clone {clone_args} {url} {dest}' "
-                   "{username}").format(git_args=args.get('git', ''),
-                                        clone_args=args.get('clone', ''),
-                                        url=args.get('url'),
-                                        dest=dest,
-                                        username=bunit.build_user)
-            logger.debug('Generated `{}` from src_url={}'.format(cmd, src_url))
-            return cmd
-
-        def process_deps():
-            for name in src_depends:
-                url = src_depends[name]
-                # Suspect logger...
-                logger.debug('Processing dependency: {} => {}'
-                             ''.format(name, url))
-                cmd = clone_cmd(url, name)
-                check_output(shlex.split(cmd))
-
-        process_deps()
-        cmd = clone_cmd(src_url, 'chef-bcpc')
-        check_output(shlex.split(cmd))
-
-    def configure(self, bunit, *args, **kwargs):
-        """Configures the build unit."""
-        basedir = bunit.get_build_path()
-        workdir = os.path.join(basedir, 'chef-bcpc')
-        conf_dir = os.path.join(workdir, 'bootstrap', 'config')
-        conffile = os.path.join(conf_dir, 'bootstrap_config.sh.overrides')
-        logger = bunit.logger
-
-        tmpl_src = dedent("""\
-            export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
-            export BCPC_VM_DIR=${build_dir}/bcpc-vms
-            export BOOTSTRAP_ADDITIONAL_CACERTS_DIR=${build_dir}/cacerts
-            export BOOTSTRAP_APT_MIRROR=
-            export BOOTSTRAP_CACHE_DIR=${build_dir}/.bcpc-cache
-            export BOOTSTRAP_CHEF_DO_CONVERGE=1
-            export BOOTSTRAP_CHEF_ENV=Test-Laptop-Vagrant-Multirack
-            export BOOTSTRAP_DNS_RESOLVER=10.10.10.10
-            export BOOTSTRAP_DOMAIN=bcpc.example.com
-            export BOOTSTRAP_HTTP_PROXY_URL=${http_proxy_url}
-            export BOOTSTRAP_HTTPS_PROXY_URL=${https_proxy_url}
-            export BOOTSTRAP_VM_CPUS=2
-            export BOOTSTRAP_VM_DRIVE_SIZE=20480
-            export BOOTSTRAP_VM_MEM=4096
-            export CLUSTER=multirack
-            export CLUSTER_VM_CPUS=2
-            export CLUSTER_VM_DRIVE_SIZE=20480
-            export CLUSTER_VM_MEM=3072
-            export CLUSTER_VM_MEM=8192
-            export FILECACHE_MOUNT_POINT=/chef-bcpc-files
-            export MONITORING_NODES=0
-            export MONITORING_NODES=3
-            export REPO_MOUNT_POINT=/chef-bcpc-host
-            export REPO_MOUNT_POINT=/chef-bcpc-host
-            export VM_SWAP_SIZE=8192
-        """)
-        tmpl = string.Template(tmpl_src)
-        # TODO(kmidzi): get from somewhere??
-        values = {
-            'build_dir': basedir,
-            'http_proxy_url': 'http://proxy.example.com:3128',
-            'https_proxy_url': 'http://proxy.example.com:3128',
-        }
-        configuration = tmpl.substitute(values)
-        with open(conffile, 'w') as c:
-            logger.info('Writing build configuration to %s' % conffile)
-            logger.debug({'configuration': configuration})
-            c.write(configuration)
-            perms = {'user': bunit.name, 'group': bunit.name}
-            logger.debug('Setting permissions {perms} on configuration'
-                         ' file at {filename}'.format(perms=perms,
-                                                      filename=conffile))
-            shutil.chown(conffile, **perms)
-
-        self.install_certs(bunit)
+    CONF_TEMPLATE = dedent("""\
+        export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
+        export BCPC_VM_DIR=${build_dir}/bcpc-vms
+        export BOOTSTRAP_ADDITIONAL_CACERTS_DIR=${build_dir}/cacerts
+        export BOOTSTRAP_APT_MIRROR=
+        export BOOTSTRAP_CACHE_DIR=${build_dir}/.bcpc-cache
+        export BOOTSTRAP_CHEF_DO_CONVERGE=1
+        export BOOTSTRAP_CHEF_ENV=Test-Laptop-Vagrant-Multirack
+        export BOOTSTRAP_DNS_RESOLVER=10.10.10.10
+        export BOOTSTRAP_DOMAIN=bcpc.example.com
+        export BOOTSTRAP_HTTP_PROXY_URL=${http_proxy_url}
+        export BOOTSTRAP_HTTPS_PROXY_URL=${https_proxy_url}
+        export BOOTSTRAP_VM_CPUS=2
+        export BOOTSTRAP_VM_DRIVE_SIZE=20480
+        export BOOTSTRAP_VM_MEM=4096
+        export CLUSTER=multirack
+        export CLUSTER_VM_CPUS=2
+        export CLUSTER_VM_DRIVE_SIZE=20480
+        export CLUSTER_VM_MEM=3072
+        export CLUSTER_VM_MEM=8192
+        export FILECACHE_MOUNT_POINT=/chef-bcpc-files
+        export MONITORING_NODES=0
+        export MONITORING_NODES=3
+        export REPO_MOUNT_POINT=/chef-bcpc-host
+        export REPO_MOUNT_POINT=/chef-bcpc-host
+        export VM_SWAP_SIZE=8192
+    """)
+    SRC_DEPENDS = {
+        'leafy-spines': 'https://repo.example.com/private/leafy-spines'
+    }
 
 
 DEFAULT_ALLOCATOR = V7BuildUnitAllocator
