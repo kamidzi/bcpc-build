@@ -3,6 +3,7 @@ from sqlalchemy import Column, Integer, String
 import sqlalchemy as sa
 from bcpc_build.db.migration_types import UUIDType
 import uuid
+from datetime import datetime
 
 Base = declarative_base()
 
@@ -15,6 +16,11 @@ class BuildUnitBase(Base):
     description = Column(sa.Unicode(200))
     name = Column(sa.Unicode(128), nullable=False)
     source_url = Column(sa.Unicode(200), nullable=False)
+    created_at = Column(sa.TIMESTAMP(True), nullable=False,
+                                            default=datetime.utcnow)
+    updated_at = Column(sa.TIMESTAMP(True), nullable=False,
+                                            onupdate=datetime.utcnow,
+                                            default=datetime.utcnow)
 
     def __repr__(self):
         return ("<BuildUnit(name='{name}', build_dir={build_dir},"
