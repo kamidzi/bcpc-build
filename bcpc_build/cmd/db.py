@@ -38,7 +38,10 @@ def migrate(ctx):
 @click.option('--destination', help='URI for destination.', required=True)
 @click.pass_context
 def backup(ctx, destination):
-    dbutils.backup(destination)
+    try:
+        dbutils.backup(destination)
+    except dbutils.BackupError as e:
+        click.echo(e, err=True)
 
 
 @cli.command('import', help="Import the database.")
@@ -49,8 +52,11 @@ def backup(ctx, destination):
 def import_db(ctx, backup, uri):
     dest = dbutils.get_backup_uri()
     try:
-        if backup:
-            dbutils.backup(dest)
+        try:
+            if backup:
+                dbutils.backup(dest)
+        except dbutils.NoBackupSource:
+            pass
         dbutils.import_db(uri)
     except Exception as e:
         click.echo('Could not import database: %s' % e, err=True)

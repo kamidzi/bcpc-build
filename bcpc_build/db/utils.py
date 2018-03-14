@@ -2,6 +2,7 @@ from bcpc_build import config
 from datetime import datetime
 from furl import furl
 from pathlib import Path
+from shutil import copy2
 from shutil import copyfile
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -58,6 +59,12 @@ def import_db(uri):
         raise NotImplementedError('import_db for %s' % scheme)
 
 
+class BackupError(RuntimeError):
+    pass
+
+class NoBackupSource(BackupError):
+    pass
+
 def backup(dest):
     """Backs up a database."""
     uri = furl(config.db.url)
@@ -65,9 +72,14 @@ def backup(dest):
     scheme = uri.scheme
 
     if scheme == 'sqlite':
-        src = str(uri.path.normalize())
-        dest = str(dest.path.normalize())
-        args = ['cp', '-p', src, dest]
+        try:
+            src = str(uri.path.normalize())
+            dest = str(dest.path.normalize())
+            copy2(src, dest)
+        except FileNotFoundError as e:
+            if e.filename == src:
+                # No source database to backup
+                raise NoBackupSource(src)
+            raise BackupError(e)
     else:
         raise NotImplementedError('db backup for %s' % scheme)
-    call(args)
