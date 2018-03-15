@@ -14,7 +14,6 @@ except ImportError:
 
 
 @click.command(help='Bootstraps a new build.')
-@click.pass_context
 @click.option('--config-file', '-c', type=click.File(),
               help='Config file for bootstrap operation.')
 @click.option('--source-url', help='URL for build sources.')
@@ -24,7 +23,9 @@ except ImportError:
               default=BuildUnitAllocator.BUILD_STRATEGY_DEFAULT)
 @click.option('--wait/--no-wait', default=False,
               help='Wait for bootstrap to complete in foreground.')
-def bootstrap(ctx, config_file, source_url, strategy, wait):
+@click.pass_context
+@click.argument('name')
+def bootstrap(ctx, config_file, source_url, strategy, wait, name):
     def _parse_conf(conffile):
         cfg = ConfigParser()
         cfg.read_file(conffile)
@@ -47,7 +48,7 @@ def bootstrap(ctx, config_file, source_url, strategy, wait):
     try:
         if not source_url:
             source_url = allocator.DEFAULT_SRC_URL
-        build = allocator.allocate(source_url=source_url)
+        build = allocator.allocate(source_url=source_url, name=name)
         allocator.provision(build, conf=conf)
         info = json.loads(build.to_json())
     except AllocationError as e:

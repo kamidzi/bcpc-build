@@ -25,6 +25,10 @@ except ImportError:
     import json
 
 
+class DuplicateNameError(ValueError):
+    pass
+
+
 @total_ordering
 class BuildUnit(BuildUnitBase):
     _jsonattrs_ = (
@@ -79,7 +83,7 @@ class BuildUnit(BuildUnitBase):
 
     def get_build_path(self):
         build_home = BuildUnitAllocator.DEFAULT_BUILD_HOME
-        return os.path.join(build_home, self.name)
+        return os.path.join(build_home, self.build_user)
 
     def to_json(self):
         indent = 2
@@ -204,7 +208,7 @@ class BuildUnitAllocator(ABC):
             logger.info('Writing build configuration to %s' % conffile)
             logger.debug({'configuration': configuration})
             c.write(configuration)
-            perms = {'user': bunit.name, 'group': bunit.name}
+            perms = {'user': bunit.build_user, 'group': bunit.build_user}
             logger.debug('Setting permissions {perms} on configuration'
                          ' file at {filename}'.format(perms=perms,
                                                       filename=conffile))
@@ -275,8 +279,13 @@ class BuildUnitAllocator(ABC):
 
     def provision(self, build, *args, **kwargs):
         conf = kwargs.get('conf', {}).copy()
-        self.populate(build, conf=conf)
-        self.configure(build)
+        try:
+            self.populate(build, conf=conf)
+            self.configure(build)
+            self.session.commit()
+        except:
+            logger.info('Rolling back changes.')
+            self.session.rollback()
         return build
 
     def destroy(self, bunit):
@@ -309,15 +318,18 @@ class BuildUnitAllocator(ABC):
 
     def allocate(self, *args, **kwargs):
         kwargs = kwargs.copy()
+        name = kwargs.get('name')
+        bunit = self.session.query(BuildUnit).filter(BuildUnit.name == name)\
+                    .one_or_none()
+        if bunit:
+            raise DuplicateNameError(name)
         build_user = self.allocate_build_user(self.generate_build_user_name())
-        build_dir = self.allocate_build_dir(build_user=build_user)
         kwargs.setdefault('build_user', build_user)
-        kwargs.setdefault('build_dir', build_dir)
         kwargs.setdefault('name', build_user)
+        build_dir = self.allocate_build_dir(**kwargs)
+        kwargs.setdefault('build_dir', build_dir)
         bunit = BuildUnit(**kwargs)
-        # flush it here
         self.session.add(bunit)
-        self.session.commit()
         return bunit
 
     def generate_build_user_name(self):
@@ -345,7 +357,15 @@ class BuildUnitAllocator(ABC):
     def allocate_build_dir(self, *args, **kwargs):
         """Allocates a Build Unit data directory"""
         build_user = kwargs.get('build_user', self.generate_build_user_name())
-        return os.path.join(self.conf.get('build_home'), build_user)
+        # Really, build_user homedir is required...
+        try:
+            u = getpwnam(build_user)
+            path = u.pw_dir
+            if not path:
+                raise ValueError('pw_dir')
+        except (KeyError, ValueError):
+            path = os.path.join(self.conf.get('build_home'), build_user)
+        return path
 
 
 class V7BuildUnitAllocator(BuildUnitAllocator):
