@@ -53,6 +53,9 @@ def bootstrap(ctx, config_file, source_url, strategy, wait, name):
         info = json.loads(build.to_json())
     except AllocationError as e:
         allocator._deallocate(build)
+        raise click.ClickException(e)
+    except Exception as e:
+        raise click.ClickException(e)
 
     def do_bootstrap(info):
         # Print the build_unit info

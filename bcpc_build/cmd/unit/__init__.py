@@ -64,7 +64,7 @@ class BuildUnitShowTableFormat(ShowFormat):
 
 
 class BuildUnitListingTableFormat(ListingFormat):
-    SHORT_HEADER_ROW = ('id', 'build_dir', 'created_at', 'updated_at')
+    SHORT_HEADER_ROW = ('id', 'build_dir', 'name', 'updated_at')
     LONG_HEADER_ROW = list(BuildUnit._attrs_) + ['created_at', 'updated_at']
 
     @classmethod
@@ -78,7 +78,8 @@ class BuildUnitListingTableFormat(ListingFormat):
         def generate_tdata(_data):
             import builtins
             rows = [header]
-            rows += builtins.list(map(lambda x: render_row(x), _data))
+            data_rows = builtins.list(map(lambda x: render_row(x), _data))
+            rows += sorted(data_rows, key=lambda r: r[-1])
             return rows
 
         tdata = generate_tdata(data)
