@@ -2,6 +2,7 @@ from bcpc_build.build_unit import BuildUnitAllocator
 from bcpc_build.build_unit import DEFAULT_ALLOCATOR
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
 from bcpc_build.exceptions import AllocationError
+from bcpc_build.exceptions import ProvisionError
 from configparser import ConfigParser
 import click
 import shlex
@@ -17,6 +18,8 @@ except ImportError:
 @click.option('--config-file', '-c', type=click.File(),
               help='Config file for bootstrap operation.')
 @click.option('--source-url', help='URL for build sources.')
+@click.option('--depends', help='Source dependency <name>:<url>',
+              multiple=True, default=[])
 @click.option('--strategy',
               help='Build strategy.',
               type=click.Choice(BuildUnitAllocator.BUILD_STRATEGY_NAMES),
@@ -24,8 +27,8 @@ except ImportError:
 @click.option('--wait/--no-wait', default=False,
               help='Wait for bootstrap to complete in foreground.')
 @click.pass_context
-@click.argument('name')
-def bootstrap(ctx, config_file, source_url, strategy, wait, name):
+@click.argument('name', default='')
+def bootstrap(ctx, config_file, source_url, depends, strategy, wait, name):
     def _parse_conf(conffile):
         cfg = ConfigParser()
         cfg.read_file(conffile)
@@ -34,6 +37,16 @@ def bootstrap(ctx, config_file, source_url, strategy, wait, name):
             ret[k] = dict(sect.items())
         return ret
 
+    def _parse_depends(lst):
+        SEP = '='
+        pairs = []
+        for spec in lst:
+            spec = spec.strip()
+            if spec:
+                k, u = spec.split(SEP)
+                pairs.append((k,u))
+        return dict(pairs or {})
+
     # TODO(kamidzi): do this properly
     # Get the bootstrap config and move DEFAULT keys to toplevel with other
     # params from click context
@@ -41,6 +54,8 @@ def bootstrap(ctx, config_file, source_url, strategy, wait, name):
     _conf = _parse_conf(config_file) if config_file else {}
     conf.update(_conf.pop('DEFAULT', {}))
     conf.update(_conf)
+    if depends and not depends[0].startswith('--'):
+        conf['src_depends'] = _parse_depends(depends)
     if not wait:
         raise CommandNotImplementedError('bootstrap --no-wait')
     allocator = BuildUnitAllocator.get_allocator(conf=conf)
@@ -52,9 +67,10 @@ def bootstrap(ctx, config_file, source_url, strategy, wait, name):
         allocator.provision(build, conf=conf)
         info = json.loads(build.to_json())
     except AllocationError as e:
-        allocator._deallocate(build)
+        allocator.destroy(build, commit=False)
         raise click.ClickException(e)
-    except Exception as e:
+    except ProvisionError as e:
+        allocator.destroy(build, commit=False)
         raise click.ClickException(e)
 
     def do_bootstrap(info):

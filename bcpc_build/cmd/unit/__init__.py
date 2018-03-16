@@ -117,7 +117,7 @@ def build(ctx, source_url):
     allocator = BuildUnitAllocator()
     allocator.setup()
     build = allocator.allocate()
-    allocator.provision(build)
+    allocator.provision(build, conf={})
     click.echo(build.to_json())
 
 

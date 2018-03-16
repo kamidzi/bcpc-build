@@ -25,10 +25,6 @@ except ImportError:
     import json
 
 
-class DuplicateNameError(ValueError):
-    pass
-
-
 @total_ordering
 class BuildUnit(BuildUnitBase):
     _jsonattrs_ = (
@@ -91,8 +87,6 @@ class BuildUnit(BuildUnitBase):
         return json.dumps(info, indent=2)
 
 
-class AllocationError(RuntimeError):
-    pass
 
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -218,7 +212,7 @@ class BuildUnitAllocator(ABC):
 
     @classmethod
     def populate(cls, bunit, conf={}, *args, **kwargs):
-        src_depends = cls.SRC_DEPENDS or {}
+        src_depends = conf.get('src_depends', cls.SRC_DEPENDS or {})
         src_url = bunit.source_url
         build_path = bunit.get_build_path()
         logger = bunit.logger
@@ -282,16 +276,15 @@ class BuildUnitAllocator(ABC):
         try:
             self.populate(build, conf=conf)
             self.configure(build)
-            self.session.commit()
-        except:
-            logger.info('Rolling back changes.')
-            self.session.rollback()
+        except Exception as e:
+            raise ProvisionError(e) from e
         return build
 
-    def destroy(self, bunit):
+    def destroy(self, bunit, commit=True):
         # find processes
         # kill processes
         # userdel -r
+#        import pdb ; pdb.set_trace()
         def get_procs(user):
             p_attrs = ['pid', 'username']
             plist = list(filter(lambda p: p.info['username'] == user,
@@ -303,14 +296,15 @@ class BuildUnitAllocator(ABC):
             timeout = 3
             for proc in plist:
                 # multiproc here?
-                kill_proc_tree(proc.info['pid'])
+                utils.kill_proc_tree(proc.info['pid'])
 
         def remove_user(user):
             kill_user_procs(user)
             utils.userdel(user)
 
         remove_user(bunit.build_user)
-        self._deallocate(bunit)
+        if commit:
+            self._deallocate(bunit)
 
     def _deallocate(self, bunit):
         self.session.delete(bunit)
@@ -318,11 +312,14 @@ class BuildUnitAllocator(ABC):
 
     def allocate(self, *args, **kwargs):
         kwargs = kwargs.copy()
-        name = kwargs.get('name')
-        bunit = self.session.query(BuildUnit).filter(BuildUnit.name == name)\
-                    .one_or_none()
-        if bunit:
-            raise DuplicateNameError(name)
+        name = kwargs.pop('name')
+        if name:
+            bunit = self.session.query(BuildUnit).filter(BuildUnit.name == name)\
+                        .one_or_none()
+            if bunit:
+                raise DuplicateNameError(name)
+            # FIXME(kmidzi): complicated by name='' default for optional arg
+            kwargs['name'] = name
         build_user = self.allocate_build_user(self.generate_build_user_name())
         kwargs.setdefault('build_user', build_user)
         kwargs.setdefault('name', build_user)
@@ -330,6 +327,7 @@ class BuildUnitAllocator(ABC):
         kwargs.setdefault('build_dir', build_dir)
         bunit = BuildUnit(**kwargs)
         self.session.add(bunit)
+        self.session.commit()
         return bunit
 
     def generate_build_user_name(self):
