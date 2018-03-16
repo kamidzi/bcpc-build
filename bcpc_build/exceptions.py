@@ -13,3 +13,7 @@ class AllocationError(RuntimeError):
 
 class ProvisionError(RuntimeError):
     pass
+
+
+class ConfigurationError(RuntimeError):
+    pass

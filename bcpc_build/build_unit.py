@@ -19,6 +19,7 @@ import shlex
 import shutil
 import string
 import sys
+import subprocess
 try:
     import simplejson as json
 except ImportError:
@@ -275,7 +276,8 @@ class BuildUnitAllocator(ABC):
         conf = kwargs.get('conf', {}).copy()
         try:
             self.populate(build, conf=conf)
-            self.configure(build)
+            # FIXME(kmidzi): sus
+            self.configure(build, src_depends=conf.get('src_depends'))
         except Exception as e:
             raise ProvisionError(e) from e
         return build
@@ -425,6 +427,33 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
     SRC_DEPENDS = {
         'leafy-spines': 'https://repo.example.com/private/leafy-spines'
     }
+
+    def configure(self, bunit, *args, **kwargs):
+        super().configure(bunit, *args, **kwargs)
+        logger = bunit.logger 
+        def get_net_ids():
+            if 'leafy-spines' in kwargs.get('src_depends', {}):
+                basedir = bunit.get_build_path()
+                workdir = os.path.join(basedir, 'leafy-spines')
+                libdir = os.path.join(workdir, 'provisioning', 'lib')
+                binpath = os.path.join(libdir, 'utils.rb')
+                logger = bunit.logger
+                nets = ['management', 'storage', 'tenant']
+                args = ['generate-network-ids'] + nets
+                cmd = ['ruby', binpath] + args 
+                ret = subprocess.check_output(cmd)
+                netmap = json.loads(ret)
+                return netmap
+
+        def update_cluster_conf(*args, **kwargs):
+            logger.info('Updating cluster configuration for MODE')
+
+        try:
+            netmap = get_net_ids()
+            print(netmap)       
+            update_cluster_conf(netmap)
+        except Exception as e:
+            raise ConfigurationError(e) from e
 
 
 DEFAULT_ALLOCATOR = V7BuildUnitAllocator
