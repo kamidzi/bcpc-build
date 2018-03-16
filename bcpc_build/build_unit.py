@@ -88,11 +88,6 @@ class BuildUnit(BuildUnitBase):
         return json.dumps(info, indent=2)
 
 
-
-
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-
-
 class BuildUnitAllocator(ABC):
     BUILD_DIR_PREFIX = 'chef-bcpc.'
     DEFAULT_BUILD_HOME = '/build'
@@ -286,7 +281,6 @@ class BuildUnitAllocator(ABC):
         # find processes
         # kill processes
         # userdel -r
-#        import pdb ; pdb.set_trace()
         def get_procs(user):
             p_attrs = ['pid', 'username']
             plist = list(filter(lambda p: p.info['username'] == user,
@@ -428,9 +422,46 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         'leafy-spines': 'https://repo.example.com/private/leafy-spines'
     }
 
+    def get_build_config(self, bunit):
+        class BuildConfig(object):
+            def __init__(self, name, filename):
+                self.name = name
+                self.filename = filename
+                self._refresh()
+
+            @property
+            def contents(self):
+                return self._contents
+
+            def _refresh(self):
+                try:
+                    with open(self.filename, 'r') as f:
+                        self._contents = json.load(f)
+                except Exception as e:
+                    raise Exception('Could not initialize contents.') from e
+
+            def update(self, updates):
+                self._contents.update(updates)
+
+            def flush(self):
+                sp = 2
+                with open(self.filename, 'w') as f:
+                    f.write(json.dumps(self._contents, indent=sp))
+                self._refresh()
+
+
+        logger = bunit.logger
+        basedir = bunit.get_build_path()
+        workdir = os.path.join(basedir, 'chef-bcpc')
+        confdir = os.path.join(workdir, 'bootstrap', 'config')
+        build_type = 'multirack'
+        conffile = os.path.join(confdir, build_type) + '.json'
+        bconf = BuildConfig(build_type, conffile)
+        return bconf
+
     def configure(self, bunit, *args, **kwargs):
         super().configure(bunit, *args, **kwargs)
-        logger = bunit.logger 
+        logger = bunit.logger
         def get_net_ids():
             if 'leafy-spines' in kwargs.get('src_depends', {}):
                 basedir = bunit.get_build_path()
@@ -440,17 +471,21 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
                 logger = bunit.logger
                 nets = ['management', 'storage', 'tenant']
                 args = ['generate-network-ids'] + nets
-                cmd = ['ruby', binpath] + args 
+                cmd = ['ruby', binpath] + args
                 ret = subprocess.check_output(cmd)
-                netmap = json.loads(ret)
+                netmap = {'networks': json.loads(ret)}
                 return netmap
 
-        def update_cluster_conf(*args, **kwargs):
-            logger.info('Updating cluster configuration for MODE')
-
+        def update_cluster_conf(updates):
+            build_config = self.get_build_config(bunit)
+            logger.info('Updating cluster configuration for %s'
+                        '' % build_config.name)
+            build_config.update(updates)
+            build_config.flush()
+            logger.debug('FLUSHED CONFIGURATION\n%s' %
+                         json.dumps(build_config.contents, indent=1))
         try:
             netmap = get_net_ids()
-            print(netmap)       
             update_cluster_conf(netmap)
         except Exception as e:
             raise ConfigurationError(e) from e
