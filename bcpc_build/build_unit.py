@@ -5,21 +5,22 @@ from bcpc_build import config
 from bcpc_build import utils
 from collections import OrderedDict
 from functools import total_ordering
+from furl import furl
+from itertools import chain
+from psutil import process_iter
 from pwd import getpwnam
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from subprocess import check_output
 from textwrap import dedent
-from psutil import process_iter
-from furl import furl
 import logging
 import os
-import shortuuid
 import shlex
+import shortuuid
 import shutil
 import string
-import sys
 import subprocess
+import sys
 try:
     import simplejson as json
 except ImportError:
@@ -147,13 +148,36 @@ class BuildUnitAllocator(ABC):
         if not os.path.exists(build_home):
             create_build_home()
 
-    # TODO(kamidzi): move me
-    def _list_build_areas(self):
-        # TODO(kmidzi): should this return [] ???
-        try:
-            return os.listdir(self.conf.get('build_home'))
-        except FileNotFoundError as e:
-            return []
+    def build(self, bunit):
+        build_user = bunit.build_user
+        cmd = ("su -c \"bash -c 'cd chef-bcpc/bootstrap/vagrant_scripts &&"
+               " time ./BOOT_GO.sh'\" -"
+               " {build_user}".format(build_user=build_user))
+        self.logger.debug('Building with command `%s`' % cmd)
+        return self._build_with_command(bunit, cmd)
+
+    def _build_with_command(self, bunit, cmd):
+        proc = subprocess.Popen(shlex.split(cmd),
+                                stdout=subprocess.PIPE,
+                                universal_newlines=True)
+
+        # Need start_new_session to run in background?
+        def exit_condition(status):
+            if status == 0:
+                return True
+            elif status < 0:
+                raise SignalException(status)
+            else:
+                raise NonZeroExit(status)
+
+        while True:
+            output = proc.stdout.readline().strip()
+            status = proc.poll()
+            if output == '' and status is not None:
+                if exit_condition(status):
+                    break
+            if output:
+                yield output
 
     def install_certs(self, bunit):
         CERTS_DIR = '/var/tmp/bcpc-cacerts'
@@ -387,7 +411,6 @@ class V7BuildUnitAllocator(BuildUnitAllocator):
     """)
 
 
-
 class V8BuildUnitAllocator(BuildUnitAllocator):
     DEFAULT_SRC_URL =\
         'https://github.com/bloomberg/BCPC/chef-bcpc/tree/v8/xenial'
@@ -422,6 +445,15 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         'leafy-spines': 'https://repo.example.com/private/leafy-spines'
     }
 
+    def build(self, bunit):
+        build_user = bunit.build_user
+        cmd = ("su -c \"bash -c 'cd leafy-spines &&"
+               " vagrant up'\" - {build_user}".format(build_user=build_user))
+        self.logger.debug('Building dependencies with command: `%s`' % cmd)
+        deps = self._build_with_command(bunit, cmd)
+        base = super().build(bunit)
+        return chain(deps, base)
+
     def get_build_config(self, bunit):
         class BuildConfig(object):
             def __init__(self, name, filename):
@@ -449,7 +481,6 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
                     f.write(json.dumps(self._contents, indent=sp))
                 self._refresh()
 
-
         logger = bunit.logger
         basedir = bunit.get_build_path()
         workdir = os.path.join(basedir, 'chef-bcpc')
@@ -462,6 +493,7 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
     def configure(self, bunit, *args, **kwargs):
         super().configure(bunit, *args, **kwargs)
         logger = bunit.logger
+
         def get_net_ids():
             if 'leafy-spines' in kwargs.get('src_depends', {}):
                 basedir = bunit.get_build_path()

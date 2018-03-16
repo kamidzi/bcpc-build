@@ -66,11 +66,16 @@ def bootstrap(ctx, config_file, source_url, depends, strategy, wait, name):
         build = allocator.allocate(source_url=source_url, name=name)
         allocator.provision(build, conf=conf)
         info = json.loads(build.to_json())
-    except AllocationError as e:
-        allocator.destroy(build, commit=False)
-        raise click.ClickException(e)
-    except ProvisionError as e:
-        allocator.destroy(build, commit=False)
+        click.echo(info)
+        build_seq = allocator.build(build)
+        try:
+            while True:
+                click.echo(next(build_seq))
+        except StopIteration:
+            click.echo('Bootstrap complete.')
+    except (AllocationError, ProvisionError) as e:
+        click.echo('Rolling back changes...') 
+        allocator.destroy(build, commit=True)
         raise click.ClickException(e)
 
     def do_bootstrap(info):
@@ -101,5 +106,3 @@ def bootstrap(ctx, config_file, source_url, depends, strategy, wait, name):
             if output:
                 print(output)
         click.echo(json.dumps(info, indent=2))
-
-    do_bootstrap(info)
