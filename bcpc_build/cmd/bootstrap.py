@@ -24,11 +24,16 @@ except ImportError:
               help='Build strategy.',
               type=click.Choice(BuildUnitAllocator.BUILD_STRATEGY_NAMES),
               default=BuildUnitAllocator.BUILD_STRATEGY_DEFAULT)
+@click.option('--configure/--no-configure', default=True,
+              help='Run the configuration phase.')
+@click.option('--build/--no-build', default=True,
+              help='Run the build phase.')
 @click.option('--wait/--no-wait', default=False,
               help='Wait for bootstrap to complete in foreground.')
 @click.pass_context
 @click.argument('name', default='')
-def bootstrap(ctx, config_file, source_url, depends, strategy, wait, name):
+def bootstrap(ctx, config_file, source_url, depends,
+              strategy, configure, build, wait, name):
     def _parse_conf(conffile):
         cfg = ConfigParser()
         cfg.read_file(conffile)
@@ -66,43 +71,16 @@ def bootstrap(ctx, config_file, source_url, depends, strategy, wait, name):
         build = allocator.allocate(source_url=source_url, name=name)
         allocator.provision(build, conf=conf)
         info = json.loads(build.to_json())
-        click.echo(info)
-        build_seq = allocator.build(build)
-        try:
-            while True:
-                click.echo(next(build_seq))
-        except StopIteration:
-            click.echo('Bootstrap complete.')
+        click.echo(json.dumps(info, indent=2))
+        # do the build
+        if conf['build']:
+            build_seq = allocator.build(build)
+            try:
+                while True:
+                    click.echo(next(build_seq))
+            except StopIteration:
+                click.echo('Bootstrap complete.')
     except (AllocationError, ProvisionError) as e:
         click.echo('Rolling back changes...') 
         allocator.destroy(build, commit=True)
         raise click.ClickException(e)
-
-    def do_bootstrap(info):
-        # Print the build_unit info
-        click.echo(json.dumps(info, indent=2))
-        cmd = ("su -c \"bash -c 'cd chef-bcpc/bootstrap/vagrant_scripts &&"
-               " time ./BOOT_GO.sh'\" - {build_user}".format(**info))
-        proc = subprocess.Popen(shlex.split(cmd),
-                                stdout=subprocess.PIPE,
-                                universal_newlines=True)
-
-        # Need start_new_session to run in background?
-        def handle_status(status):
-            if status == 0:
-                sys.exit(0)
-            elif status < 0:
-                sys.exit('Build process killed with'
-                         ' signal %d' % (-1*status))
-            else:
-                sys.exit('Build process exited with'
-                         ' status %d' % status)
-
-        while True:
-            output = proc.stdout.readline().strip()
-            status = proc.poll()
-            if output == '' and status is not None:
-                handle_status(status)
-            if output:
-                print(output)
-        click.echo(json.dumps(info, indent=2))

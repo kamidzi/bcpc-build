@@ -275,7 +275,7 @@ class BuildUnitAllocator(ABC):
                                         url=args.get('url'),
                                         dest=dest,
                                         username=bunit.build_user)
-            logger.debug('Generated `{}` from src_url={}'.format(cmd, src_url))
+            logger.debug('Clone cmd `{}` from src_url={}'.format(cmd, src_url))
             return cmd
 
         def process_deps():
@@ -287,6 +287,7 @@ class BuildUnitAllocator(ABC):
                 cmd = clone_cmd(url, name)
                 check_output(shlex.split(cmd))
 
+        logger.info('Populating build unit...')
         process_deps()
         cmd = clone_cmd(src_url, 'chef-bcpc')
         check_output(shlex.split(cmd))
@@ -294,9 +295,11 @@ class BuildUnitAllocator(ABC):
     def provision(self, build, *args, **kwargs):
         conf = kwargs.get('conf', {}).copy()
         try:
+            self.logger.info('Provisioning build unit...')
             self.populate(build, conf=conf)
             # FIXME(kmidzi): sus
-            self.configure(build, src_depends=conf.get('src_depends'))
+            if conf['configure']:
+                self.configure(build, src_depends=conf.get('src_depends'))
         except Exception as e:
             raise ProvisionError(e) from e
         return build
