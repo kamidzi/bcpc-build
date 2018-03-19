@@ -220,7 +220,11 @@ class BuildUnitAllocator(ABC):
         configuration = tmpl.substitute(values)
         with open(conffile, 'w') as c:
             logger.info('Writing build configuration to %s' % conffile)
-            logger.debug({'configuration': configuration})
+            logger.debug(
+                json.dumps({
+                    'Configuration': configuration.split('\n')
+                }, indent=2)
+            )
             c.write(configuration)
             perms = {'user': bunit.build_user, 'group': bunit.build_user}
             logger.debug('Setting permissions {perms} on configuration'
