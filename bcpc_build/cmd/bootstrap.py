@@ -3,6 +3,7 @@ from bcpc_build.build_unit import DEFAULT_ALLOCATOR
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
 from bcpc_build.exceptions import AllocationError
 from bcpc_build.exceptions import ProvisionError
+from bcpc_build.exceptions import BuildError
 from configparser import ConfigParser
 import click
 import shlex
@@ -84,3 +85,5 @@ def bootstrap(ctx, config_file, source_url, depends,
         click.echo('Rolling back changes...') 
         allocator.destroy(build, commit=True)
         raise click.ClickException(e)
+    except (BuildError, ) as e:
+        raise click.ClickException(e) from e
