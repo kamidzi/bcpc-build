@@ -1,3 +1,4 @@
+from bcpc_build.build_unit import BuildLogger
 from bcpc_build.build_unit import BuildUnitAllocator
 from bcpc_build.build_unit import DEFAULT_ALLOCATOR
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
@@ -64,26 +65,30 @@ def bootstrap(ctx, config_file, source_url, depends,
         conf['src_depends'] = _parse_depends(depends)
     if not wait:
         raise CommandNotImplementedError('bootstrap --no-wait')
+    else:
+        stream = sys.stdout
     allocator = BuildUnitAllocator.get_allocator(conf=conf)
     allocator.setup()
     try:
         if not source_url:
             source_url = allocator.DEFAULT_SRC_URL
-        build = allocator.allocate(source_url=source_url, name=name)
-        allocator.provision(build, conf=conf)
-        info = json.loads(build.to_json())
+        bunit = allocator.allocate(source_url=source_url, name=name)
+        allocator.provision(bunit, conf=conf)
+        info = json.loads(bunit.to_json())
         click.echo(json.dumps(info, indent=2))
         # do the build
         if conf['build']:
-            build_seq = allocator.build(build)
+            build_seq = allocator.build(bunit)
+            blog = allocator.get_build_log(bunit)
+            blogger = BuildLogger(filename=blog, func=click.echo)
             try:
                 while True:
-                    click.echo(next(build_seq))
+                    blogger.echo(next(build_seq))
             except StopIteration:
                 click.echo('Bootstrap complete.')
     except (AllocationError, ProvisionError) as e:
         click.echo('Rolling back changes...') 
-        allocator.destroy(build, commit=True)
+        allocator.destroy(bunit, commit=True)
         raise click.ClickException(e)
     except (BuildError, ) as e:
         raise click.ClickException(e) from e

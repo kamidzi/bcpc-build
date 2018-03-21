@@ -89,6 +89,47 @@ class BuildUnit(BuildUnitBase):
         return json.dumps(info, indent=2)
 
 
+class BuildLogger(object):
+    def __init__(self, filename=None, stream=None, func=None, **kwargs):
+        self.filename = filename
+        self.stream = stream
+        self.func = func
+
+        def _prepare_dests():
+            self._dests = []
+            if stream:
+                # TODO(kmidzi): open files?
+                self._dests.append(stream)
+            if filename:
+                # TODO(kmidzi): open files?
+                self._dests.append(open(filename, 'w'))
+            if not self._dests:
+                raise ValueError('No valid destinations supplied.')
+
+        _prepare_dests()
+
+    def echo(self, data):
+        return self.write(data, raw=False)
+
+    def write(self, data, raw=True):
+        # Never mod input to supplied function
+        cooked_data = data if raw else data + '\n'
+        for d in self._dests:
+            d.write(cooked_data)
+        if self.func:
+            self.func(data)
+
+    def flush(self):
+        for d in self._dests:
+            d.flush()
+
+    def __repr__(self):
+        attrs = ['filename', 'stream', 'func']
+        kwargs = dict(map(lambda a: (a, getattr(self, a)), attrs))
+        return ('<BuildLogger (filename={filename}, stream={stream})>'
+                ''.format(**kwargs))
+
+
 class BuildUnitAllocator(ABC):
     BUILD_DIR_PREFIX = 'chef-bcpc.'
     DEFAULT_BUILD_HOME = '/build'
@@ -116,6 +157,13 @@ class BuildUnitAllocator(ABC):
         except KeyError:
             raise AllocationError('No allocators defined for strategy "{}"'
                                   ''.format(strategy))
+
+    @staticmethod
+    def get_build_log(bunit):
+        # TODO(kmidzi): simple
+        LOGNAME = 'build.log'
+        bpath = bunit.get_build_path()
+        return os.path.join(bpath, LOGNAME)
 
     @property
     def session(self):
@@ -270,26 +318,24 @@ class BuildUnitAllocator(ABC):
                 logger.debug('Revision detection error: %s' % e)
             return args
 
-
         def get_cmds(url, name):
-
             def _checkout_cmd(rev, dest):
                 cmd = ("su -c"
-                    " 'git -C {dest} fetch origin {rev} &&"
-                    " git -C {dest} checkout FETCH_HEAD' "
-                    " {username}").format(rev=rev,
-                                          username=bunit.build_user,
-                                          dest=dest)
+                       " 'git -C {dest} fetch origin {rev} &&"
+                       " git -C {dest} checkout FETCH_HEAD' "
+                       " {username}").format(rev=rev,
+                                             username=bunit.build_user,
+                                             dest=dest)
                 logger.debug('Checkout cmd `{}` from rev={}'.format(cmd, rev))
                 yield cmd
 
             def _clone_cmd(src_url, name=''):
                 cmd = ("su -c 'git {git_args} clone {clone_args} {url} {name}' "
-                    "{username}").format(git_args=args.get('git', ''),
-                                         clone_args=args.get('clone', ''),
-                                         url=args.get('url'),
-                                         name=name,
-                                         username=bunit.build_user)
+                       "{username}").format(git_args=args.get('git', ''),
+                                            clone_args=args.get('clone', ''),
+                                            url=args.get('url'),
+                                            name=name,
+                                            username=bunit.build_user)
                 logger.debug('Clone cmd `{}` from src_url={}'.format(cmd, src_url))
                 yield cmd
 
