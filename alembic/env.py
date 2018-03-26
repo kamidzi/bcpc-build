@@ -70,15 +70,20 @@ def run_migrations_online():
         prefix='sqlalchemy.',
         poolclass=pool.NullPool)
 
+    context_opts = dict(
+        target_metadata=target_metadata,
+        user_module_prefix='bcpc_build.db.migration_types.',
+    )
+    if connectable.name == 'sqlite':
+        context_opts.update(dict(render_as_batch=True))
+
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            user_module_prefix='bcpc_build.db.migration_types.'
-        )
+        context_opts.update(dict(connection=connection))
+        context.configure(**context_opts)
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()
