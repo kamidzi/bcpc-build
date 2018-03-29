@@ -23,7 +23,7 @@ def upgrade():
             'provisioned', 'provisioning',
             'configuring', 'configured',
             'building', 'done', 'failed',
-            'failed:provision', 'failed:build',
+            'failed_provision', 'failed_build',
             name='buildstateenum'), nullable=True))
 
 
