@@ -19,6 +19,11 @@ except ImportError:
 from json import JSONEncoder
 
 
+class NotFoundError(click.ClickException):
+    def __init__(id, *args, **kwargs):
+        super().__init__("No such unit with id '%s'" % id)
+
+
 ### formatters ###
 class DisplayFormat(abc.ABC):
     @classmethod
@@ -188,10 +193,31 @@ def shell(ctx, id):
 @click.pass_context
 @click.argument('id')
 def destroy(ctx, id):
+    sa_errors = (sa.orm.exc.NoResultFound,
+            sa.orm.exc.NoResultFound)
     try:
+        bunit = None
         allocator = BuildUnitAllocator()
-        bunit = allocator.session.query(BuildUnit).get(id)
+        # use id or name
+        try:
+            md = BuildUnit.metadata
+            sa_type = type(md.tables[BuildUnit.__tablename__].c.id.type)
+            sa_type._coerce(id)
+            bunit = allocator.session.query(BuildUnit).get(id)
+        except ValueError as e:
+            allocator.logger.debug('Attempting BuildUnit lookup by name.')
+        except Exception:
+            allocator.logger.debug('Some error occurred: %s' % e)
+
+        if not bunit:
+            try:
+                q = allocator.session.query(BuildUnit).filter_by(name=id)
+                bunit = q.one()
+            except sa_errors as e:
+                raise NotFoundError(id) from e
         allocator.destroy(bunit)
+    except click.ClickException:
+        raise
     except Exception as e:
         click.echo(e)
         raise click.Abort
@@ -220,11 +246,5 @@ def list(ctx, format, long):
         raise click.Abort
     except KeyError:
         raise NotImplementedError('%s format' % format)
-
-
-class NotFoundError(click.ClickException):
-    def __init__(id, *args, **kwargs):
-        super().__init__("No such unit with id '%s'" % id)
-
 
 cli.add_command(config_cli, name='config')
