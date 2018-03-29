@@ -21,9 +21,9 @@ class BuildUnitBase(Base):
         'build_state',
         Enum(BuildStateEnum, values_callable=lambda x: [e.value for e in x])
     )
-    created_at = Column(sa.TIMESTAMP(True), nullable=False,
+    created_at = Column(sa.TIMESTAMP(True), nullable=True,
                                             default=datetime.utcnow)
-    updated_at = Column(sa.TIMESTAMP(True), nullable=False,
+    updated_at = Column(sa.TIMESTAMP(True), nullable=True,
                                             onupdate=datetime.utcnow,
                                             default=datetime.utcnow)
 
