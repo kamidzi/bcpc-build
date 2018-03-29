@@ -1,10 +1,11 @@
 from bcpc_build.build_unit import BuildLogger
+from bcpc_build.build_unit import BuildStateEnum
 from bcpc_build.build_unit import BuildUnitAllocator
 from bcpc_build.build_unit import DEFAULT_ALLOCATOR
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
 from bcpc_build.exceptions import AllocationError
-from bcpc_build.exceptions import ProvisionError
 from bcpc_build.exceptions import BuildError
+from bcpc_build.exceptions import ProvisionError
 from configparser import ConfigParser
 import click
 import shlex
@@ -85,10 +86,15 @@ def bootstrap(ctx, config_file, source_url, depends,
                 while True:
                     blogger.echo(next(build_seq))
             except StopIteration:
+                allocator.set_build_state(build, BuildStateEnum.done)
                 click.echo('Bootstrap complete.')
     except (AllocationError, ProvisionError) as e:
         click.echo('Rolling back changes...') 
         allocator.destroy(bunit, commit=True)
         raise click.ClickException(e)
     except (BuildError, ) as e:
+        #allocator.set_build_state(build, BuildStateEnum.failed_build)
+        raise click.ClickException(e) from e
+    except (Exception, ) as e:
+        #allocator.set_build_state(build, BuildStateEnum.failed)
         raise click.ClickException(e) from e

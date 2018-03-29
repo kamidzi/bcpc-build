@@ -1,5 +1,6 @@
 from abc import ABC
 from bcpc_build.db.models.build_unit import BuildUnitBase
+from bcpc_build.db.models.build_unit import BuildStateEnum
 from bcpc_build.exceptions import *
 from bcpc_build import config
 from bcpc_build import utils
@@ -197,6 +198,7 @@ class BuildUnitAllocator(ABC):
             create_build_home()
 
     def build(self, bunit):
+        self.set_build_state(bunit, BuildStateEnum.building)
         build_user = bunit.build_user
         cmd = ("su -c \"bash -c 'cd chef-bcpc/bootstrap/vagrant_scripts &&"
                " time ./BOOT_GO.sh'\" -"
@@ -226,6 +228,15 @@ class BuildUnitAllocator(ABC):
                     break
             if output:
                 yield output
+
+    def set_build_state(self, bunit, state):
+        if not isinstance(state, BuildStateEnum):
+            raise ValueError('Incompatible build state.')
+
+        #TODO(kmidzi): re-using same session. Issues?
+        bunit.build_state = state
+        self.session.add(bunit)
+        self.session.commit()
 
     def install_certs(self, bunit):
         CERTS_DIR = '/var/tmp/bcpc-cacerts'
@@ -266,6 +277,7 @@ class BuildUnitAllocator(ABC):
             'https_proxy_url': 'http://proxy.example.com:3128',
         }
         configuration = tmpl.substitute(values)
+        self.set_build_state(bunit, BuildStateEnum.configuring)
         with open(conffile, 'w') as c:
             logger.info('Writing build configuration to %s' % conffile)
             logger.debug(
@@ -281,6 +293,7 @@ class BuildUnitAllocator(ABC):
             shutil.chown(conffile, **perms)
 
         self.install_certs(bunit)
+        self.set_build_state(bunit, BuildStateEnum.configured)
 
     @classmethod
     def populate(cls, bunit, conf={}, *args, **kwargs):
@@ -366,11 +379,14 @@ class BuildUnitAllocator(ABC):
         conf = kwargs.get('conf', {}).copy()
         try:
             self.logger.info('Provisioning build unit...')
+            self.set_build_state(build, BuildStateEnum.provisioning)
             self.populate(build, conf=conf)
             # FIXME(kmidzi): sus
             if conf['configure']:
                 self.configure(build, src_depends=conf.get('src_depends'))
+            self.set_build_state(build, BuildStateEnum.provisioned)
         except Exception as e:
+            self.set_build_state(build, BuildStateEnum.failed_provision)
             raise ProvisionError(e) from e
         return build
 

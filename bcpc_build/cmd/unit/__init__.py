@@ -64,8 +64,10 @@ class BuildUnitShowTableFormat(ShowFormat):
 
 
 class BuildUnitListingTableFormat(ListingFormat):
-    SHORT_HEADER_ROW = ('id', 'build_dir', 'name', 'updated_at')
-    LONG_HEADER_ROW = list(BuildUnit._attrs_) + ['created_at', 'updated_at']
+    SHORT_HEADER_ROW = ('id', 'build_dir', 'name', 'updated_at', 'build_state')
+    LONG_HEADER_ROW = list(BuildUnit._attrs_) + [
+        'created_at', 'updated_at', 'build_state'
+    ]
 
     @classmethod
     def format(cls, data, **kwargs):
