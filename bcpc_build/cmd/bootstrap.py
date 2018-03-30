@@ -70,6 +70,7 @@ def bootstrap(ctx, config_file, source_url, depends,
         stream = sys.stdout
     allocator = BuildUnitAllocator.get_allocator(conf=conf)
     allocator.setup()
+    bunit = None
     try:
         if not source_url:
             source_url = allocator.DEFAULT_SRC_URL
@@ -86,15 +87,15 @@ def bootstrap(ctx, config_file, source_url, depends,
                 while True:
                     blogger.echo(next(build_seq))
             except StopIteration:
-                allocator.set_build_state(build, BuildStateEnum.done)
+                allocator.set_build_state(bunit, BuildStateEnum.done)
                 click.echo('Bootstrap complete.')
     except (AllocationError, ProvisionError) as e:
         click.echo('Rolling back changes...') 
         allocator.destroy(bunit, commit=True)
         raise click.ClickException(e)
     except (BuildError, ) as e:
-        #allocator.set_build_state(build, BuildStateEnum.failed_build)
+        allocator.set_build_state(bunit, BuildStateEnum.failed_build)
         raise click.ClickException(e) from e
     except (Exception, ) as e:
-        #allocator.set_build_state(build, BuildStateEnum.failed)
+        allocator.set_build_state(bunit, BuildStateEnum.failed)
         raise click.ClickException(e) from e
