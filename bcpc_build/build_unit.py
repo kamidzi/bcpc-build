@@ -409,7 +409,14 @@ class BuildUnitAllocator(ABC):
 
         def remove_user(user):
             kill_user_procs(user)
-            utils.userdel(user)
+            try:
+                utils.userdel(user)
+            except subprocess.CalledProcessError as e:
+                # User does not exist - man(5) userdel
+                if e.returncode == 6:
+                    self.logger.info("Ignoring non-existent user '%s'" % user)
+                else:
+                    raise
 
         remove_user(bunit.build_user)
         if commit:
