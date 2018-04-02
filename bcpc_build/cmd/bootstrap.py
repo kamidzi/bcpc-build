@@ -3,6 +3,7 @@ from bcpc_build.build_unit import BuildStateEnum
 from bcpc_build.build_unit import BuildUnitAllocator
 from bcpc_build.build_unit import DEFAULT_ALLOCATOR
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
+from bcpc_build.dec import *
 from bcpc_build.exceptions import AllocationError
 from bcpc_build.exceptions import BuildError
 from bcpc_build.exceptions import ProvisionError
@@ -64,38 +65,43 @@ def bootstrap(ctx, config_file, source_url, depends,
     conf.update(_conf)
     if depends and not depends[0].startswith('--'):
         conf['src_depends'] = _parse_depends(depends)
+
+    def do_bootstrap(source_url):
+        allocator = BuildUnitAllocator.get_allocator(conf=conf)
+        allocator.setup()
+        bunit = None
+        try:
+            if not source_url:
+                source_url = allocator.DEFAULT_SRC_URL
+            bunit = allocator.allocate(source_url=source_url, name=name)
+            allocator.provision(bunit, conf=conf)
+            info = json.loads(bunit.to_json())
+            click.echo(json.dumps(info, indent=2))
+            # do the build
+            if conf['build']:
+                build_seq = allocator.build(bunit)
+                blog = allocator.get_build_log(bunit)
+                blogger = BuildLogger(filename=blog, func=click.echo)
+                try:
+                    while True:
+                        blogger.echo(next(build_seq))
+                except StopIteration:
+                    allocator.set_build_state(bunit, BuildStateEnum.done)
+                    click.echo('Bootstrap complete.')
+        except (AllocationError, ProvisionError) as e:
+            import traceback
+            traceback.print_exc()
+            click.echo('Rolling back changes...')
+            allocator.destroy(bunit, commit=True)
+            raise click.ClickException(e)
+        except (BuildError, ) as e:
+            allocator.set_build_state(bunit, BuildStateEnum.failed_build)
+            raise click.ClickException(e) from e
+        except (Exception, ) as e:
+            allocator.set_build_state(bunit, BuildStateEnum.failed)
+            raise click.ClickException(e) from e
+
     if not wait:
-        raise CommandNotImplementedError('bootstrap --no-wait')
-    else:
-        stream = sys.stdout
-    allocator = BuildUnitAllocator.get_allocator(conf=conf)
-    allocator.setup()
-    bunit = None
-    try:
-        if not source_url:
-            source_url = allocator.DEFAULT_SRC_URL
-        bunit = allocator.allocate(source_url=source_url, name=name)
-        allocator.provision(bunit, conf=conf)
-        info = json.loads(bunit.to_json())
-        click.echo(json.dumps(info, indent=2))
-        # do the build
-        if conf['build']:
-            build_seq = allocator.build(bunit)
-            blog = allocator.get_build_log(bunit)
-            blogger = BuildLogger(filename=blog, func=click.echo)
-            try:
-                while True:
-                    blogger.echo(next(build_seq))
-            except StopIteration:
-                allocator.set_build_state(bunit, BuildStateEnum.done)
-                click.echo('Bootstrap complete.')
-    except (AllocationError, ProvisionError) as e:
-        click.echo('Rolling back changes...') 
-        allocator.destroy(bunit, commit=True)
-        raise click.ClickException(e)
-    except (BuildError, ) as e:
-        allocator.set_build_state(bunit, BuildStateEnum.failed_build)
-        raise click.ClickException(e) from e
-    except (Exception, ) as e:
-        allocator.set_build_state(bunit, BuildStateEnum.failed)
-        raise click.ClickException(e) from e
+        close_fds=False
+        do_bootstrap = daemonize(close_fds)(do_bootstrap)
+    do_bootstrap(source_url)

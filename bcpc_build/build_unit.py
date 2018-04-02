@@ -13,6 +13,7 @@ from pwd import getpwnam
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from subprocess import check_output
+from subprocess import CalledProcessError
 from textwrap import dedent
 import logging
 import os
@@ -378,8 +379,10 @@ class BuildUnitAllocator(ABC):
 
     def provision(self, build, *args, **kwargs):
         conf = kwargs.get('conf', {}).copy()
+        conf.setdefault('src_depends', self.SRC_DEPENDS)
         try:
             self.logger.info('Provisioning build unit...')
+            self.logger.debug({'conf': conf})
             self.set_build_state(build, BuildStateEnum.provisioning)
             self.populate(build, conf=conf)
             # FIXME(kmidzi): sus
@@ -592,18 +595,22 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         logger = bunit.logger
 
         def get_net_ids():
+            netmap = {'networks': {}}
             if 'leafy-spines' in kwargs.get('src_depends', {}):
-                basedir = bunit.get_build_path()
-                workdir = os.path.join(basedir, 'leafy-spines')
-                libdir = os.path.join(workdir, 'provisioning', 'lib')
-                binpath = os.path.join(libdir, 'utils.rb')
-                logger = bunit.logger
-                nets = ['management', 'storage', 'tenant']
-                args = ['generate-network-ids'] + nets
-                cmd = ['ruby', binpath] + args
-                ret = subprocess.check_output(cmd)
-                netmap = {'networks': json.loads(ret)}
-                return netmap
+                try:
+                    basedir = bunit.get_build_path()
+                    workdir = os.path.join(basedir, 'leafy-spines')
+                    libdir = os.path.join(workdir, 'provisioning', 'lib')
+                    binpath = os.path.join(libdir, 'utils.rb')
+                    logger = bunit.logger
+                    nets = ['management', 'storage', 'tenant']
+                    args = ['generate-network-ids'] + nets
+                    cmd = ['ruby', binpath] + args
+                    ret = subprocess.check_output(cmd)
+                    netmap = {'networks': json.loads(ret)}
+                except CalledProcessError as e:
+                    raise ConfigurationError(e) from e
+            return netmap
 
         def update_cluster_conf(updates):
             build_config = self.get_build_config(bunit)
