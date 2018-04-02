@@ -102,6 +102,6 @@ def bootstrap(ctx, config_file, source_url, depends,
             raise click.ClickException(e) from e
 
     if not wait:
-        close_fds=False
+        close_fds=True
         do_bootstrap = daemonize(close_fds)(do_bootstrap)
     do_bootstrap(source_url)
