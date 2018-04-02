@@ -35,6 +35,7 @@ class BuildUnit(BuildUnitBase):
         'source_url',
         'build_user',
         'build_dir',
+        'build_state',
     )
 
     _attrs_ = tuple(['id'] + list(_jsonattrs_))
@@ -43,7 +44,7 @@ class BuildUnit(BuildUnitBase):
     def get_json_dict(cls, bunit):
         d = OrderedDict({'id': str(bunit.id)})
         d.update(OrderedDict(
-            map(lambda k: (k, getattr(bunit, k)), cls._jsonattrs_))
+            map(lambda k: (k, str(getattr(bunit, k))), cls._jsonattrs_))
         )
         # FIXME(kmidzi)
         return d

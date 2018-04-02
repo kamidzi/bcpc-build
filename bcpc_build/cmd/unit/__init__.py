@@ -2,6 +2,7 @@ from bcpc_build.build_unit import BuildUnit
 from bcpc_build.build_unit import BuildUnitAllocator
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
 from bcpc_build.db import utils
+from bcpc_build.db.migration_types import BuildStateEnum
 from .config import cli as config_cli
 from pathlib import Path
 from terminaltables import AsciiTable
@@ -246,5 +247,42 @@ def list(ctx, format, long):
         raise click.Abort
     except KeyError:
         raise NotImplementedError('%s format' % format)
+
+@cli.command(help='Modify build unit metadata')
+@click.pass_context
+@click.argument('id')
+@click.option('--set-state', help='Set build unit state.',
+              type=click.Choice(BuildStateEnum.__members__.keys()),
+              metavar='BUILDSTATE')
+def modify(ctx, set_state, id):
+    sa_errors = (sa.orm.exc.NoResultFound,
+                sa.orm.exc.NoResultFound)
+    try:
+        bunit = None
+        allocator = BuildUnitAllocator()
+        # use id or name
+        try:
+            md = BuildUnit.metadata
+            sa_type = type(md.tables[BuildUnit.__tablename__].c.id.type)
+            sa_type._coerce(id)
+            bunit = allocator.session.query(BuildUnit).get(id)
+        except ValueError as e:
+            allocator.logger.debug('Attempting BuildUnit lookup by name.')
+        except Exception:
+            allocator.logger.debug('Some error occurred: %s' % e)
+
+        if not bunit:
+            try:
+                q = allocator.session.query(BuildUnit).filter_by(name=id)
+                bunit = q.one()
+            except sa_errors as e:
+                raise NotFoundError(id) from e
+
+        if set_state:
+            state_obj = getattr(BuildStateEnum, set_state)
+            allocator.set_build_state(bunit, state_obj)
+    except click.ClickException:
+        raise
+
 
 cli.add_command(config_cli, name='config')
