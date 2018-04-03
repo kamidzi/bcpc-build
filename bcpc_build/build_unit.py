@@ -487,6 +487,7 @@ class BuildUnitAllocator(ABC):
 
 
 class V7BuildUnitAllocator(BuildUnitAllocator):
+    DEFAULT_BUILD_STRATEGY = 'v7'
     DEFAULT_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
     CONF_TEMPLATE = dedent("""\
         export BCPC_VM_DIR=${build_dir}/bcpc-vms
@@ -512,6 +513,7 @@ class V7BuildUnitAllocator(BuildUnitAllocator):
 
 
 class V8BuildUnitAllocator(BuildUnitAllocator):
+    DEFAULT_BUILD_STRATEGY = 'v8'
     DEFAULT_SRC_URL =\
         'https://github.com/bloomberg/BCPC/chef-bcpc/tree/v8/xenial'
     CONF_TEMPLATE = dedent("""\

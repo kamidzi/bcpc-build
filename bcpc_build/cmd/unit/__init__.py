@@ -1,3 +1,4 @@
+from bcpc_build.build_unit import BuildLogger
 from bcpc_build.build_unit import BuildUnit
 from bcpc_build.build_unit import BuildUnitAllocator
 from bcpc_build.cmd.exceptions import CommandNotImplementedError
@@ -118,15 +119,54 @@ def cli(ctx):
 
 @cli.command(help='Initiate a build of a unit.')
 @click.pass_context
-@click.option('--source-url', help='Source url for the build.')
+@click.option('--wait/--no-wait', default=False,
+              help='Wait for build synchronously.')
 @click.option('--strategy', help='Build strategy.',
-              type=click.Choice(BuildUnitAllocator.BUILD_STRATEGY_NAMES))
-def build(ctx, source_url):
-    allocator = BuildUnitAllocator()
-    allocator.setup()
-    build = allocator.allocate()
-    allocator.provision(build, conf={})
-    click.echo(build.to_json())
+              type=click.Choice(BuildUnitAllocator.BUILD_STRATEGY_NAMES),
+              required=True)
+@click.argument('id')
+def build(ctx, wait, strategy, id):
+    if not wait:
+        raise CommandNotImplementedError('build --no-wait')
+    sa_errors = (sa.orm.exc.NoResultFound,
+            sa.orm.exc.NoResultFound)
+    conf = dict(strategy=strategy)
+    try:
+        bunit = None
+        allocator = BuildUnitAllocator.get_allocator(conf)
+        # use id or name
+        try:
+            md = BuildUnit.metadata
+            sa_type = type(md.tables[BuildUnit.__tablename__].c.id.type)
+            sa_type._coerce(id)
+            bunit = allocator.session.query(BuildUnit).get(id)
+        except ValueError as e:
+            allocator.logger.debug('Attempting BuildUnit lookup by name.')
+        except Exception:
+            allocator.logger.debug('Some error occurred: %s' % e)
+
+        if not bunit:
+            try:
+                q = allocator.session.query(BuildUnit).filter_by(name=id)
+                bunit = q.one()
+            except sa_errors as e:
+                raise NotFoundError(id) from e
+
+        build_seq = allocator.build(bunit)
+        blog = allocator.get_build_log(bunit)
+        log_args = dict(filename=blog)
+        if wait:
+            log_args['func'] = click.echo
+
+        blogger = BuildLogger(**log_args)
+        try:
+            while True:
+                blogger.echo(next(build_seq))
+        except StopIteration:
+            allocator.set_build_state(bunit, BuildStateEnum.done)
+            click.echo('Build complete.')
+    except click.ClickException:
+        raise
 
 
 @cli.command(help='Show build unit information.')
