@@ -10,6 +10,7 @@ from terminaltables import AsciiTable
 import abc
 import click
 import os
+import re
 import shlex
 import sqlalchemy as sa
 import subprocess
@@ -129,7 +130,7 @@ def build(ctx, wait, strategy, id):
     if not wait:
         raise CommandNotImplementedError('build --no-wait')
     sa_errors = (sa.orm.exc.NoResultFound,
-            sa.orm.exc.NoResultFound)
+                 sa.orm.exc.NoResultFound)
     conf = dict(strategy=strategy)
     try:
         bunit = None
@@ -235,7 +236,7 @@ def shell(ctx, id):
 @click.argument('id')
 def destroy(ctx, id):
     sa_errors = (sa.orm.exc.NoResultFound,
-            sa.orm.exc.NoResultFound)
+                 sa.orm.exc.NoResultFound)
     try:
         bunit = None
         allocator = BuildUnitAllocator()
@@ -268,7 +269,12 @@ def destroy(ctx, id):
 @click.pass_context
 @click.option('--format', '-f', help='Listing format', default='table')
 @click.option('--long', help='List all fields', is_flag=True, default=False)
-def list(ctx, format, long):
+@click.option('--failed', help='Filter all failed states',
+              is_flag=True, default=False)
+@click.option('--build-user', help='Filter by build user.')
+@click.option('--build-state', help='Filter by build state.',
+              type=BuildStateEnum)
+def list(ctx, format, failed, long, build_user, build_state):
     import builtins
     formatters = {
         'json': BuildUnitListingJSONFormat,
@@ -277,6 +283,23 @@ def list(ctx, format, long):
     session = utils.Session()
     try:
         builds = session.query(BuildUnit)
+        if build_user is not None:
+            builds = builds.filter(BuildUnit.build_user == build_user)
+
+        # Check for any "failed" states
+        if failed:
+            def failure_state(estate):
+                m = re.match('^failed(:[^ ]+)?$', estate.value)
+                return m
+
+            failed_states = filter(failure_state,
+                                   BuildStateEnum.__members__.values())
+            q = [BuildUnit.build_state == state for state in failed_states]
+            builds = builds.filter(sa.or_(*q))
+        elif build_state is not None:
+            builds = builds.filter(
+                BuildUnit.build_state == BuildStateEnum(build_state)
+            )
 
         if not builtins.list(builds):
             return
@@ -288,6 +311,7 @@ def list(ctx, format, long):
     except KeyError:
         raise NotImplementedError('%s format' % format)
 
+
 @cli.command(help='Modify build unit metadata')
 @click.pass_context
 @click.argument('id')
@@ -296,7 +320,7 @@ def list(ctx, format, long):
               metavar='BUILDSTATE')
 def modify(ctx, set_state, id):
     sa_errors = (sa.orm.exc.NoResultFound,
-                sa.orm.exc.NoResultFound)
+                 sa.orm.exc.NoResultFound)
     try:
         bunit = None
         allocator = BuildUnitAllocator()

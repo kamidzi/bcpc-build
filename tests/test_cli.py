@@ -22,8 +22,6 @@ Commands:
     runner = CliRunner()
     result = runner.invoke(main_cli)
 
-    print(output_tail(result.output))
-    print(command_output_tail)
     assert result.exit_code == 0
     assert output_tail(result.output) == command_output_tail
 
@@ -186,9 +184,12 @@ Error: Missing argument "id".
   List build units.
 
 Options:
-  -f, --format TEXT  Listing format
-  --long             List all fields
-  --help             Show this message and exit.
+  -f, --format TEXT             Listing format
+  --long                        List all fields
+  --failed                      Filter all failed states
+  --build-user TEXT             Filter by build user.
+  --build-state BUILDSTATEENUM  Filter by build state.
+  --help                        Show this message and exit.
 """
             runner = CliRunner()
             result = runner.invoke(main_cli, ['unit', 'list', '--help'])
