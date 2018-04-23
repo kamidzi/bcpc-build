@@ -222,14 +222,18 @@ class BuildUnitAllocator(ABC):
             else:
                 raise NonZeroExit(status)
 
-        while True:
-            output = proc.stdout.readline().strip()
-            status = proc.poll()
-            if output == '' and status is not None:
-                if exit_condition(status):
-                    break
-            if output:
-                yield output
+        try:
+            while True:
+                output = proc.stdout.readline().strip()
+                status = proc.poll()
+                if output == '' and status is not None:
+                    if exit_condition(status):
+                        break
+                if output:
+                    yield output
+        except NonZeroExit as e:
+            self.set_build_state(bunit, BuildStateEnum.failed_build)
+            raise BuildError(e) from e
 
     def set_build_state(self, bunit, state):
         if not isinstance(state, BuildStateEnum):
