@@ -131,6 +131,15 @@ Error: Missing argument "id".
             assert result.exit_code == 2
             assert output_tail(result.output) == command_output_tail
 
+        def test_requires_strategy(self):
+            command_output_tail = """
+Error: Missing option "--strategy".  Choose from v7, v8.
+"""
+            runner = CliRunner()
+            result = runner.invoke(main_cli, ['unit', 'build', 'a-bogus-id'])
+            assert result.exit_code == 2
+            assert output_tail(result.output) == command_output_tail
+
     class TestUnitConfigSubcommand:
         def test_usage(self):
             command_output_tail = """
@@ -160,6 +169,15 @@ Options:
             runner = CliRunner()
             result = runner.invoke(main_cli, ['unit', 'destroy', '--help'])
             assert result.exit_code == 0
+            assert output_tail(result.output) == command_output_tail
+
+        def test_requires_id(self):
+            command_output_tail = """
+Error: Missing argument "id".
+"""
+            runner = CliRunner()
+            result = runner.invoke(main_cli, ['unit', 'destroy'])
+            assert result.exit_code == 2
             assert output_tail(result.output) == command_output_tail
 
     class TestUnitListSubcommand:
