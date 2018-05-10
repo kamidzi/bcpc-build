@@ -303,7 +303,7 @@ class BuildUnitAllocator(ABC):
 
     @classmethod
     def populate(cls, bunit, conf={}, *args, **kwargs):
-        src_depends = conf.get('src_depends', cls.SRC_DEPENDS or {})
+        src_depends = conf.get('src_depends') or cls.SRC_DEPENDS or {}
         src_url = bunit.source_url
         build_path = bunit.get_build_path()
         logger = bunit.logger
