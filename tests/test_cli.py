@@ -34,7 +34,7 @@ class TestBootstrapCommand:
 Options:
   -c, --config-file FILENAME    Config file for bootstrap operation.
   --source-url TEXT             URL for build sources.
-  --depends TEXT                Source dependency <name>:<url>
+  --depends TEXT                Source dependency <name>=<url>
   --strategy [v7|v8]            Build strategy.
   --configure / --no-configure  Run the configuration phase.
   --build / --no-build          Run the build phase.

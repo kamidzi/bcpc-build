@@ -18,11 +18,26 @@ except ImportError:
     import json
 
 
+DEPENDS_SPEC_SEP = '='
+
+
+from bcpc_build.exceptions import ConfigurationError
+
+
+class InvalidDependsError(ConfigurationError):
+    def __init__(self, spec):
+        self.spec = spec
+
+
 @click.command(help='Bootstraps a new build.')
 @click.option('--config-file', '-c', type=click.File(),
               help='Config file for bootstrap operation.')
 @click.option('--source-url', help='URL for build sources.')
-@click.option('--depends', help='Source dependency <name>:<url>',
+@click.option('--depends',
+              help=(
+                  'Source dependency <name>{sep}<url>'
+                  ''.format(sep=DEPENDS_SPEC_SEP)
+              ),
               multiple=True, default=[])
 @click.option('--strategy',
               help='Build strategy.',
@@ -47,13 +62,15 @@ def bootstrap(ctx, config_file, source_url, depends,
         return ret
 
     def _parse_depends(lst):
-        SEP = '='
         pairs = []
         for spec in lst:
             spec = spec.strip()
             if spec:
-                k, u = spec.split(SEP)
-                pairs.append((k,u))
+                try:
+                    k, u = spec.split(DEPENDS_SPEC_SEP)
+                except ValueError as e:
+                    raise InvalidDependsError(spec) from e
+                pairs.append((k, u))
         return dict(pairs or {})
 
     # TODO(kamidzi): do this properly
@@ -94,6 +111,9 @@ def bootstrap(ctx, config_file, source_url, depends,
             click.echo('Rolling back changes...')
             allocator.destroy(bunit, commit=True)
             raise click.ClickException(e)
+        except (ConfigurationError, ) as e:
+            allocator.set_build_state(bunit, BuildStateEnum.failed_build)
+            raise click.ClickException(e) from e
         except (BuildError, ) as e:
             allocator.set_build_state(bunit, BuildStateEnum.failed_build)
             raise click.ClickException(e) from e
@@ -102,6 +122,6 @@ def bootstrap(ctx, config_file, source_url, depends,
             raise click.ClickException(e) from e
 
     if not wait:
-        close_fds=True
+        close_fds = True
         do_bootstrap = daemonize(close_fds)(do_bootstrap)
     do_bootstrap(source_url)
