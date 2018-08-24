@@ -329,12 +329,12 @@ class BuildUnitAllocator(ABC):
             args['url'] = url.url
             try:
                 path, rev = str(path).split('/tree/')
-                logger.debug('Detected revision %s from source url' % rev)
+                logger.debug('Detected branch %s from source url' % rev)
                 args['revision'] = rev
                 url.set(path=path)
                 args['url'] = url.url
             except (ValueError,) as e:
-                logger.debug('Revision detection error: %s' % e)
+                logger.debug('Revision/branch detection error: %s' % e)
             return args
 
         def get_cmds(url, name):
