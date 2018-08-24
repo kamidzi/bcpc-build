@@ -112,6 +112,21 @@ class BuildUnitListingJSONFormat(ListingFormat):
         return json.dumps(data, default=BuildUnitEncoder.default, indent=2)
 
 
+class BuildUnitListingValueFormat(ListingFormat):
+    VALUE_SEP = ' '
+    @classmethod
+    def format(cls, data, **kwargs):
+        def get_attrs(obj):
+            for name in obj._attrs_:
+                yield str(getattr(obj, name))
+
+        def render(obj):
+            return cls.VALUE_SEP.join(tuple(get_attrs(obj)))
+
+        return '\n'.join(
+            render(o) for o in data
+        )
+
 @click.group(help='Manages build units.')
 @click.pass_context
 def cli(ctx):
@@ -279,6 +294,7 @@ def list(ctx, format, failed, long, build_user, build_state):
     formatters = {
         'json': BuildUnitListingJSONFormat,
         'table': BuildUnitListingTableFormat,
+        'value': BuildUnitListingValueFormat,
     }
     session = utils.Session()
     try:
