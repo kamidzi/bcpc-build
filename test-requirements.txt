@@ -11,3 +11,6 @@ pluggy==0.6.0
 py==1.5.3
 pytest==3.5.0
 pytest-cov==2.5.1
+pytest-mock==1.10.0
+codecov==2.0.15
+tox==3.2.1
