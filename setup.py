@@ -16,8 +16,10 @@ try:
     setup_args = dict(config['metadata'])
 except Exception as e:
     import sys
+    setup_args = {}
     print('Error reading setup.cfg: %s' % e, file=sys.stderr)
 
+# Update everything from setup.cfg
 setup_args.update(dict(
     packages=find_packages(),
     # TODO(kmidzi): offload
@@ -27,7 +29,8 @@ setup_args.update(dict(
         bcpc-build-db=bcpc_build.cmd.db:cli
         bcpc-build-unit=bcpc_build.cmd.unit:cli
         bcpc-build-unit-config=bcpc_build.cmd.unit.config:cli
-    '''
+    ''',
+    use_scm_version = True
 ))
 
 
