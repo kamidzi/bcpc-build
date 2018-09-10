@@ -239,7 +239,7 @@ class BuildUnitAllocator(ABC):
         if not isinstance(state, BuildStateEnum):
             raise ValueError('Incompatible build state.')
 
-        #TODO(kmidzi): re-using same session. Issues?
+        # TODO(kmidzi): re-using same session. Issues?
         bunit.build_state = state
         self.session.add(bunit)
         self.session.commit()
@@ -410,7 +410,6 @@ class BuildUnitAllocator(ABC):
 
         def kill_user_procs(user):
             plist = get_procs(user)
-            timeout = 3
             for proc in plist:
                 # multiproc here?
                 utils.kill_proc_tree(proc.info['pid'])
@@ -438,8 +437,9 @@ class BuildUnitAllocator(ABC):
         kwargs = kwargs.copy()
         name = kwargs.pop('name')
         if name:
-            bunit = self.session.query(BuildUnit).filter(BuildUnit.name == name)\
-                        .one_or_none()
+            bunit = self.session.query(BuildUnit).filter(
+                BuildUnit.name == name
+            ).one_or_none()
             if bunit:
                 raise DuplicateNameError(name)
             # FIXME(kmidzi): complicated by name='' default for optional arg
@@ -551,13 +551,21 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         'leafy-spines': 'https://repo.example.com/private/leafy-spines'
     }
 
+    def _base_build(self, bunit):
+        build_user = bunit.build_user
+        cmd = ("su -c \"bash -c 'cd chef-bcpc && time make create all'"
+               " - {build_user}".format(build_user=build_user))
+        self.logger.debug('Building with command `%s`' % cmd)
+        return self._build_with_command(bunit, cmd)
+
     def build(self, bunit):
         build_user = bunit.build_user
         cmd = ("su -c \"bash -c 'cd leafy-spines &&"
                " vagrant up'\" - {build_user}".format(build_user=build_user))
         self.logger.debug('Building dependencies with command: `%s`' % cmd)
+        base = self._base_build(bunit)
         deps = self._build_with_command(bunit, cmd)
-        base = super().build(bunit)
+        self.set_build_state(bunit, BuildStateEnum.building)
         return chain(deps, base)
 
     def get_build_config(self, bunit):
@@ -587,7 +595,6 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
                     f.write(json.dumps(self._contents, indent=sp))
                 self._refresh()
 
-        logger = bunit.logger
         basedir = bunit.get_build_path()
         workdir = os.path.join(basedir, 'chef-bcpc')
         confdir = os.path.join(workdir, 'bootstrap', 'config')
@@ -608,7 +615,6 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
                     workdir = os.path.join(basedir, 'leafy-spines')
                     libdir = os.path.join(workdir, 'provisioning', 'lib')
                     binpath = os.path.join(libdir, 'utils.rb')
-                    logger = bunit.logger
                     nets = ['management', 'storage', 'tenant']
                     args = ['generate-network-ids'] + nets
                     cmd = ['ruby', binpath] + args
