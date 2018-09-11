@@ -159,7 +159,7 @@ class ConfigHandler(ABC):
         return self._configs
 
 
-class ComponentConfigHandler:
+class ComponentConfigHandler(ConfigHandler):
     """Handles configuration of build component."""
 
     def __init__(self, component, parent=None):
@@ -298,3 +298,23 @@ class V8ConfigHandler(ConfigHandler):
         # TODO(kmidzi): should this yield (component, net) instead?
         for k in nets_map:
             yield (k, nets_map[k])
+
+
+if __name__ == '__main__':
+    from bcpc_build.build_unit import BuildUnit
+    from bcpc_build.db import utils
+    from pprint import pprint
+    import sqlalchemy as sa
+    import sys
+
+    # Test enumeration
+    session = utils.Session()
+    id_ = '48d00e2d-8832-40c7-8c13-acfba3b6e671'
+    id_ = '40b638b7-5a0a-47c6-99c4-732d296bb34f'
+    try:
+        bunit = session.query(BuildUnit).get(id_)
+    except sa.exc.SQLAlchemyError as e:
+        sys.exit(e)
+
+    config_handler = V8ConfigHandler(bunit)
+    pprint(dict(config_handler.enumerate_nets()))

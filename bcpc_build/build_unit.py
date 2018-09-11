@@ -4,6 +4,7 @@ from bcpc_build.db.models.build_unit import BuildStateEnum
 from bcpc_build.exceptions import *
 from bcpc_build import config
 from bcpc_build import utils
+from bcpc_build.unit import V8ConfigHandler
 from collections import OrderedDict
 from functools import total_ordering
 from furl import furl
@@ -145,7 +146,7 @@ class BuildUnitAllocator(ABC):
         self._conf = kwargs.get('conf', {})
         self._conf.setdefault('build_home', self.DEFAULT_BUILD_HOME)
         self._logger = logging.getLogger(__name__)
-        self._session = None
+        self._session = kwargs.get('session', None)
 
     @staticmethod
     def get_allocator(conf, *args, **kwargs):
@@ -518,8 +519,6 @@ class V7BuildUnitAllocator(BuildUnitAllocator):
 
 class V8BuildUnitAllocator(BuildUnitAllocator):
     DEFAULT_BUILD_STRATEGY = 'v8'
-    DEFAULT_SRC_URL =\
-        'https://github.com/bloomberg/BCPC/chef-bcpc/tree/v8/xenial'
     CONF_TEMPLATE = dedent("""\
         export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
         export BCPC_VM_DIR=${build_dir}/bcpc-vms
@@ -547,6 +546,9 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         export REPO_MOUNT_POINT=/chef-bcpc-host
         export VM_SWAP_SIZE=8192
     """)
+    DEFAULT_SRC_URL = (
+        'https://github.com/BCPC/chef-bcpc/tree/v8/xenial'
+    )
     SRC_DEPENDS = {
         'leafy-spines': 'https://repo.example.com/private/leafy-spines'
     }
@@ -569,65 +571,23 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         return chain(deps, base)
 
     def get_build_config(self, bunit):
-        class BuildConfig(object):
-            def __init__(self, name, filename):
-                self.name = name
-                self.filename = filename
-                self._refresh()
-
-            @property
-            def contents(self):
-                return self._contents
-
-            def _refresh(self):
-                try:
-                    with open(self.filename, 'r') as f:
-                        self._contents = json.load(f)
-                except Exception as e:
-                    raise Exception('Could not initialize contents.') from e
-
-            def update(self, updates):
-                self._contents.update(updates)
-
-            def flush(self):
-                sp = 2
-                with open(self.filename, 'w') as f:
-                    f.write(json.dumps(self._contents, indent=sp))
-                self._refresh()
-
-        basedir = bunit.get_build_path()
-        workdir = os.path.join(basedir, 'chef-bcpc')
-        confdir = os.path.join(workdir, 'bootstrap', 'config')
-        build_type = 'multirack'
-        conffile = os.path.join(confdir, build_type) + '.json'
-        bconf = BuildConfig(build_type, conffile)
+        bconf = V8ConfigHandler(bunit)
         return bconf
 
     def configure(self, bunit, *args, **kwargs):
-        super().configure(bunit, *args, **kwargs)
         logger = bunit.logger
+        bunit_config = self.get_build_config(bunit)
+        self.set_build_state(bunit, BuildStateEnum.configuring)
 
         def get_net_ids():
-            netmap = {'networks': {}}
-            if 'leafy-spines' in kwargs.get('src_depends', {}):
-                try:
-                    basedir = bunit.get_build_path()
-                    workdir = os.path.join(basedir, 'leafy-spines')
-                    libdir = os.path.join(workdir, 'provisioning', 'lib')
-                    binpath = os.path.join(libdir, 'utils.rb')
-                    nets = ['management', 'storage', 'tenant']
-                    args = ['generate-network-ids'] + nets
-                    cmd = ['ruby', binpath] + args
-                    ret = subprocess.check_output(cmd)
-                    netmap = {'networks': json.loads(ret)}
-                except CalledProcessError as e:
-                    raise ConfigurationError(e) from e
-            return netmap
+            return dict(bunit_config.enumerate_nets())
 
         def update_cluster_conf(updates):
-            build_config = self.get_build_config(bunit)
             logger.info('Updating cluster configuration for %s'
-                        '' % build_config.name)
+                        '' % bunit_config.bunit.name)
+
+
+            raise NotImplementedError()
             build_config.update(updates)
             build_config.flush()
             logger.debug('FLUSHED CONFIGURATION\n%s' %
@@ -635,6 +595,7 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         try:
             netmap = get_net_ids()
             update_cluster_conf(netmap)
+            self.set_build_state(bunit, BuildStateEnum.configured)
         except Exception as e:
             raise ConfigurationError(e) from e
 
