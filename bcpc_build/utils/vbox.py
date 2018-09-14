@@ -43,7 +43,6 @@ else:
     except ImportError:
         _prop_exc = (Exception,)
 
-
     def _init_vbox_sysprops():
         global VBOX_SYSTEM_PROPERTIES
         _sysprops = virtualbox.VirtualBox().system_properties
@@ -59,7 +58,7 @@ else:
                 pass
 
         VBOX_SYSTEM_PROPERTIES = dict(
-            filter(None, map( _extract_prop_kv, _sysprop_keys))
+            filter(None, map(_extract_prop_kv, _sysprop_keys))
         )
 
 
@@ -67,7 +66,6 @@ _init_vbox_sysprops()
 
 
 def get_vbox_sysprop(key):
-    global VBOX_SYSTEM_PROPERTIES
     if VBOX_SYSTEM_PROPERTIES is None:
         _init_vbox_sysprops()
     try:
