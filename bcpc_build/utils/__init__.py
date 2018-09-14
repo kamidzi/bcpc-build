@@ -6,12 +6,19 @@ import logging
 from subprocess import check_output
 
 
+def get_vbox_sysprop(key):
+    if VBOX_SYSTEM_PROPERTIES is None:
+        _init_vbox_sysprops()
+    return VBOX_SYSTEM_PROPERTIES[key]
+
+
 def userdel(username, *args, **kwargs):
     kwargs = kwargs.copy()
     kwargs['args'] = '-r -f '
     kwargs['username'] = username
     cmd = 'userdel {args} {username}'.format(**kwargs)
     return check_output(shlex.split(cmd))
+
 
 def useradd(username, *args, **kwargs):
     def user_homedir():
@@ -21,17 +28,22 @@ def useradd(username, *args, **kwargs):
     kwargs['args'] = '-m -r -U '
     kwargs['username'] = username
     if 'shell' in kwargs:
-        kwargs['args'] += ('-s %s ' % kwargs.pop('shell'))
+        kwargs['args'] += '-s %s ' % kwargs.pop('shell')
     if 'homedir_prefix' in kwargs:
-        kwargs['args'] += ('-d ' + user_homedir())
+        kwargs['args'] += '-d ' + user_homedir()
     cmd = 'useradd {args} {username}'.format(**kwargs)
     return check_output(shlex.split(cmd))
 
 
 logger = logging.getLogger(__name__)
 # https://psutil.readthedocs.io/en/latest/#kill-process-tree
-def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
-                   timeout=None, on_terminate=None):
+def kill_proc_tree(
+    pid,
+    sig=signal.SIGTERM,
+    include_parent=True,
+    timeout=None,
+    on_terminate=None,
+):
     """Kill a process tree (including grandchildren) with signal
     "sig" and return a (gone, still_alive) tuple.
     "on_terminate", if specified, is a callaback function which is
@@ -46,14 +58,17 @@ def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
             children.append(parent)
         for p in children:
             p.send_signal(sig)
-        gone, alive = psutil.wait_procs(children, timeout=timeout,
-                                        callback=on_terminate)
+        gone, alive = psutil.wait_procs(
+            children, timeout=timeout, callback=on_terminate
+        )
         if alive:
             # send SIGKILL
             for p in alive:
                 logger.warn("process {} survived SIGTERM; trying SIGKILL" % p)
                 p.kill()
-            gone, alive = psutil.wait_procs(alive, timeout=timeout, callback=on_terminate)
+            gone, alive = psutil.wait_procs(
+                alive, timeout=timeout, callback=on_terminate
+            )
             if alive:
                 # give up
                 for p in alive:
