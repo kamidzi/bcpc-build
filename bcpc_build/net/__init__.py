@@ -2,7 +2,7 @@ import hashlib
 
 # From
 # https://github.com/bloomberg/chef-bcpc/blob/30a8971bbc1525a3b3006d6a8729df1f1a22c00b/bootstrap/vagrant_scripts/netid.py
-class NetworkIDGenerator():
+class NetworkIDGenerator:
     @staticmethod
     def generate_id(mapping):
         h = hashlib.sha256()
@@ -10,10 +10,6 @@ class NetworkIDGenerator():
             h.update(str(mapping[k]).encode('utf-8'))
         return h.hexdigest()
 
-
-# TODO(kmidzi): move me
-import pyvbox
-def netid(label):
 
 if __name__ == '__main__':
 # def generate_network_name(label)
@@ -38,3 +34,4 @@ if __name__ == '__main__':
     with open(mapping_file, 'r') as f:
         mapping = json.load(f)
         print(NetworkIDGenerator.generate_id(mapping))
+
