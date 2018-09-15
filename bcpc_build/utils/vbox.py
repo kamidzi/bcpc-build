@@ -13,7 +13,6 @@ VBOX_SYSTEM_PROPERTIES = None
 verinfo = sys.version_info
 if not (verinfo.major == 3 and verinfo.minor == 5):
     # vboxapi only *properly* supported with python3.5 on xenial
-
     def _init_vbox_sysprops():
         global VBOX_SYSTEM_PROPERTIES
         cmd = 'VBoxManage list systemproperties'
@@ -66,6 +65,7 @@ _init_vbox_sysprops()
 
 
 def get_vbox_sysprop(key):
+    global VBOX_SYSTEM_PROPERTIES
     if VBOX_SYSTEM_PROPERTIES is None:
         _init_vbox_sysprops()
     try:
