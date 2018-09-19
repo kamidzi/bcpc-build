@@ -50,7 +50,7 @@ def _mk_pip_fn(command):
             args=' '.join(_mk_opts(**kwargs)),
             name=name,
         )
-        return pip_main((shlex.split(cmd)))
+        return pip.main((shlex.split(cmd)))
 
     fn.__name__ = 'pip_{}'.format(command)
     return fn
