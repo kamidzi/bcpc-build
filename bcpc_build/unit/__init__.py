@@ -1,6 +1,5 @@
 from abc import ABC
 from abc import abstractmethod
-from abc import abstractstaticmethod
 import contextlib
 import json
 import os.path
@@ -160,7 +159,7 @@ class ConfigHandler(ABC):
         return self._configs
 
 
-class ComponentConfigHandler(ConfigHandler):
+class ComponentConfigHandler:
     """Handles configuration of build component."""
 
     def __init__(self, component, parent=None):
@@ -171,11 +170,11 @@ class ComponentConfigHandler(ConfigHandler):
         )
 
     def _gather_config_files(self, component, parent):
-        filename = COMPONENT_CONFIG_FILE_PATHS.get(component, lambda _: None)(
-            parent
-        )
-        key = os.path.basename(filename)
-        return {key: ConfigFile(key, filename)}
+        enumerator = COMPONENT_CONFIG_FILE_PATHS.get(component, lambda _: None)
+        return {
+            key: ConfigFile(key, filename)
+            for key, filename in enumerator(parent)
+        }
 
     def enumerate_nets(self):
         if self.parent is None:
@@ -184,49 +183,49 @@ class ComponentConfigHandler(ConfigHandler):
         _extract_nets = _get_net_extractor(self.component, self.parent)
         yield from set(_extract_nets())
 
+    @property
+    def configs(self):
+        return self._config_files
+
 
 def _get_net_extractor(component, parent):
     """Returns the relevant network configuration extractor."""
-    filename = COMPONENT_CONFIG_FILE_PATHS.get(component, lambda _: None)(
-        parent
-    )
+    enumerator = COMPONENT_CONFIG_FILE_PATHS.get(component, lambda _: None)
+    configs = {
+        key: ConfigFile(key, filename)
+        for key, filename in enumerator(parent)
+    }
 
     def _extract_bcpc_nets():
+        filename = 'topology/topology.yml'
         try:
-            with open(filename) as f:
-                config = yaml.load(f)
-                try:
-                    nodes = config['nodes']
+            config = configs[filename].contents
+            nodes = config['nodes']
 
-                    def _host_nets(host):
-                        host_nets = host['networking']['networks']
-                        for net in host_nets:
-                            yield net['network']
+            def _host_nets(host):
+                host_nets = host['networking']['networks']
+                for net in host_nets:
+                    yield net['network']
 
-                    def _all_nets():
-                        for host in nodes:
-                            yield from _host_nets(host)
+            def _all_nets():
+                for host in nodes:
+                    yield from _host_nets(host)
 
-                    yield from _all_nets()
-                except KeyError as e:
-                    raise ConfigurationError(filename) from e
-        except OSError as e:
+            yield from _all_nets()
+        except KeyError as e:
             raise ConfigurationError(filename) from e
 
     def _extract_leafy_spines_nets():
+        filename = 'hosts.json'
         try:
-            with open(filename) as f:
-                config = json.load(f)
-                try:
+            config = configs[filename].contents
 
-                    def _all_nets():
-                        for host in config:
-                            yield from host['networks']
+            def _all_nets():
+                for host in config:
+                    yield from host['networks']
 
-                    yield from _all_nets()
-                except KeyError as e:
-                    raise ConfigurationError(filename) from e
-        except OSError as e:
+            yield from _all_nets()
+        except KeyError as e:
             raise ConfigurationError(filename) from e
 
     _mapping = {
@@ -237,16 +236,52 @@ def _get_net_extractor(component, parent):
     return _mapping.get(component, lambda _: [])
 
 
-COMPONENT_CONFIG_FILE_PATHS = {
-    'leafy-spines': lambda parent: os.path.join(
+def _enumerate_chef_bcpc_config_paths(parent):
+    conf_base_dir = os.path.join(parent.bunit.get_build_path(), 'chef-bcpc')
+    tops_conf_dir = os.path.join(conf_base_dir, 'virtual/topology')
+
+    def _enum_configs(dirpath, prefix):
+        prefix_ = prefix
+        for root, dirs, paths in os.walk(dirpath):
+            if '.git' in dirs:
+                dirs.remove('.git')
+            for filename in paths:
+                if callable(prefix):
+                    prefix_ = prefix(dirpath, root)
+                key = os.path.join(prefix_, filename)
+                filepath = os.path.join(root, filename)
+                yield (key, filepath)
+
+    yield from _enum_configs(tops_conf_dir, 'topology')
+    chef_conf_dir = os.path.join(conf_base_dir, 'chef')
+
+    def chef_env_prefix(topdir, current_dir):
+        """Calculates the prefix for chef environment subdirectories."""
+        suffix = ''
+        if current_dir != topdir and current_dir.startswith(topdir):
+            suffix = current_dir[len(topdir):]
+        return 'chef/environments' + suffix
+
+    chef_prefix_map = dict(
+       environments=chef_env_prefix,
+       roles='chef/roles'
+    )
+
+    for subdir in chef_prefix_map:
+        _conf_dir = os.path.join(chef_conf_dir, subdir)
+        yield from _enum_configs(_conf_dir, chef_prefix_map[subdir])
+
+
+def _enumerate_leafy_spines_config_paths(parent):
+    path = os.path.join(
         parent.bunit.get_build_path(), 'leafy-spines', 'hosts.json'
-    ),
-    'chef-bcpc': lambda parent: os.path.join(
-        parent.bunit.get_build_path(),
-        'chef-bcpc',
-        'virtual/topology',
-        'topology.yml',
-    ),
+    )
+    yield ('hosts.json', path)
+
+
+COMPONENT_CONFIG_FILE_PATHS = {
+    'leafy-spines': _enumerate_leafy_spines_config_paths,
+    'chef-bcpc':  _enumerate_chef_bcpc_config_paths
 }
 
 
