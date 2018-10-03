@@ -17,6 +17,11 @@ except ImportError:
     import ConfigParser as configparser
 
 
+# For pip nonsense. See https://github.com/pypa/pip/issues/5240
+def pip_main(args):
+    return subprocess.run(['pip'] + args)
+
+
 BUILD_TIME_DEPS = ('lxml', 'requests')
 
 
@@ -45,7 +50,7 @@ def _mk_pip_fn(command):
             args=' '.join(_mk_opts(**kwargs)),
             name=name,
         )
-        return pip.main((shlex.split(cmd)))
+        return pip_main((shlex.split(cmd)))
 
     fn.__name__ = 'pip_{}'.format(command)
     return fn
@@ -56,17 +61,19 @@ pip_install = _mk_pip_fn('install')
 
 
 @contextlib.contextmanager
-def buildtime_deps(*deps):
+def buildtime_deps(*deps, uninstall=True):
     try:
         for d in deps:
             pip_install(d)
         yield
     finally:
-        for d in deps:
-            try:
-                pip_uninstall(d, yes=True)
-            except Exception:
-                warnings.warn('Failed to uninstall {}'.format(d))
+        if uninstall:
+            to_purge = uninstall if isinstance(uninstall, list) else deps
+            for d in to_purge:
+                try:
+                    pip_uninstall(d, yes=True)
+                except Exception:
+                    warnings.warn('Failed to uninstall {}'.format(d))
 
 
 setup_args = {}
@@ -93,6 +100,7 @@ setup_args.update(
         bcpc-build-unit-config=bcpc_build.cmd.unit.config:cli
     ''',
         use_scm_version=True,
+        zip_safe=False,
     )
 )
 
@@ -111,7 +119,7 @@ def format_setup_args(conf):
 setup_args = format_setup_args(setup_args)
 setup(**setup_args)
 
-with buildtime_deps(*BUILD_TIME_DEPS):
+with buildtime_deps(*BUILD_TIME_DEPS, uninstall=['lxml']):
     import _setuplib
 
     try:
