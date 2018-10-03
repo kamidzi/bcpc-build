@@ -1,5 +1,6 @@
-from setuptools import setup, find_packages
 from distutils.errors import DistutilsSetupError
+from setuptools import setup, find_packages
+from subprocess import run
 
 # from setuptools.config import read_configuration
 # process setup.cfg - for uses like `pip install .`
@@ -7,7 +8,6 @@ from distutils.errors import DistutilsSetupError
 import contextlib
 import pip
 import shlex
-import subprocess
 import sys
 import warnings
 
@@ -19,7 +19,7 @@ except ImportError:
 
 # For pip nonsense. See https://github.com/pypa/pip/issues/5240
 def pip_main(args):
-    return subprocess.run(['pip'] + args)
+    return run(['pip'] + args)
 
 
 BUILD_TIME_DEPS = ('lxml', 'requests')
@@ -50,7 +50,7 @@ def _mk_pip_fn(command):
             args=' '.join(_mk_opts(**kwargs)),
             name=name,
         )
-        return pip.main((shlex.split(cmd)))
+        return pip_main((shlex.split(cmd)))
 
     fn.__name__ = 'pip_{}'.format(command)
     return fn
