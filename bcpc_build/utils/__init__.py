@@ -5,6 +5,30 @@ import psutil
 import logging
 from subprocess import check_output
 
+from bcpc_build.net import NetworkIDGenerator
+from .vbox import *
+
+
+def generate_netids(*names):
+    return {
+        n: netid_from_name(n) for n in names
+    }
+
+
+def netid_from_name(name):
+    vm_dir = get_vbox_sysprop('default_machine_folder')
+    uid = os.geteuid()
+    # TODO(kmidzi): mapping keys need spec
+    mapping = dict(
+        label=name,
+        uid=uid,
+        virtualbox_vm_dir=vm_dir
+    )
+    netid = '{}-{}'.format(
+        name, NetworkIDGenerator.generate_id(mapping)
+    )
+    return netid
+
 
 def get_vbox_sysprop(key):
     if VBOX_SYSTEM_PROPERTIES is None:
@@ -36,6 +60,7 @@ def useradd(username, *args, **kwargs):
 
 
 logger = logging.getLogger(__name__)
+
 # https://psutil.readthedocs.io/en/latest/#kill-process-tree
 def kill_proc_tree(
     pid,
