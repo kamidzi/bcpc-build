@@ -1,4 +1,5 @@
 from abc import ABC
+from abc import abstractmethod
 from bcpc_build.db.models.build_unit import BuildUnitBase
 from bcpc_build.db.models.build_unit import BuildStateEnum
 from bcpc_build.exceptions import *
@@ -266,40 +267,10 @@ class BuildUnitAllocator(ABC):
             bunit.logger.error('Could not install certificates.')
             sys.exit(e)
 
+    @abstractmethod
     def configure(self, bunit, *args, **kwargs):
         """Configures the build unit."""
-        basedir = bunit.get_build_path()
-        workdir = os.path.join(basedir, 'chef-bcpc')
-        conf_dir = os.path.join(workdir, 'bootstrap', 'config')
-        conffile = os.path.join(conf_dir, 'bootstrap_config.sh.overrides')
-        logger = bunit.logger
-
-        tmpl_src = self.CONF_TEMPLATE
-        tmpl = string.Template(tmpl_src)
-        # TODO(kmidzi): get from somewhere??
-        values = {
-            'build_dir': basedir,
-            'http_proxy_url': 'http://proxy.example.com:3128',
-            'https_proxy_url': 'http://proxy.example.com:3128',
-        }
-        configuration = tmpl.substitute(values)
-        self.set_build_state(bunit, BuildStateEnum.configuring)
-        with open(conffile, 'w') as c:
-            logger.info('Writing build configuration to %s' % conffile)
-            logger.debug(
-                json.dumps({
-                    'Configuration': configuration.split('\n')
-                }, indent=2)
-            )
-            c.write(configuration)
-            perms = {'user': bunit.build_user, 'group': bunit.build_user}
-            logger.debug('Setting permissions {perms} on configuration'
-                         ' file at {filename}'.format(perms=perms,
-                                                      filename=conffile))
-            shutil.chown(conffile, **perms)
-
-        self.install_certs(bunit)
-        self.set_build_state(bunit, BuildStateEnum.configured)
+        raise NotImplementedError()
 
     @classmethod
     def populate(cls, bunit, conf={}, *args, **kwargs):
@@ -514,6 +485,41 @@ class V7BuildUnitAllocator(BuildUnitAllocator):
         export REPO_MOUNT_POINT=/chef-bcpc-host
         export VM_SWAP_SIZE=8192
     """)
+
+    def configure(self, bunit, *args, **kwargs):
+        """Configures the build unit."""
+        basedir = bunit.get_build_path()
+        workdir = os.path.join(basedir, 'chef-bcpc')
+        conf_dir = os.path.join(workdir, 'bootstrap', 'config')
+        conffile = os.path.join(conf_dir, 'bootstrap_config.sh.overrides')
+        logger = bunit.logger
+
+        tmpl_src = self.CONF_TEMPLATE
+        tmpl = string.Template(tmpl_src)
+        # TODO(kmidzi): get from somewhere??
+        values = {
+            'build_dir': basedir,
+            'http_proxy_url': 'http://proxy.example.com:3128',
+            'https_proxy_url': 'http://proxy.example.com:3128',
+        }
+        configuration = tmpl.substitute(values)
+        self.set_build_state(bunit, BuildStateEnum.configuring)
+        with open(conffile, 'w') as c:
+            logger.info('Writing build configuration to %s' % conffile)
+            logger.debug(
+                json.dumps({
+                    'Configuration': configuration.split('\n')
+                }, indent=2)
+            )
+            c.write(configuration)
+            perms = {'user': bunit.build_user, 'group': bunit.build_user}
+            logger.debug('Setting permissions {perms} on configuration'
+                         ' file at {filename}'.format(perms=perms,
+                                                      filename=conffile))
+            shutil.chown(conffile, **perms)
+
+        self.install_certs(bunit)
+        self.set_build_state(bunit, BuildStateEnum.configured)
 
 
 class V8BuildUnitAllocator(BuildUnitAllocator):
