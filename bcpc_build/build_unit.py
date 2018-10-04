@@ -14,7 +14,6 @@ from pwd import getpwnam
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from subprocess import check_output
-from subprocess import CalledProcessError
 from textwrap import dedent
 import logging
 import os
@@ -90,7 +89,7 @@ class BuildUnit(BuildUnitBase):
     def to_json(self):
         indent = 2
         info = self.get_json_dict(self)
-        return json.dumps(info, indent=2)
+        return json.dumps(info, indent=indent)
 
 
 class BuildLogger(object):
@@ -579,25 +578,32 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         bunit_config = self.get_build_config(bunit)
         self.set_build_state(bunit, BuildStateEnum.configuring)
 
-        def get_net_ids():
-            return dict(bunit_config.enumerate_nets())
+        # update the networks with generated ids
+        comp = 'leafy-spines'
+        nt_component_conf = config_handler.configs[comp]
+        networks = list(config_handler.configs[comp].enumerate_nets())
 
-        def update_cluster_conf(updates):
-            logger.info('Updating cluster configuration for %s'
+        core_configs = config_handler.configs['chef-bcpc']
+        cfg_prefix = 'topology/topology.yml'
+        conf = core_configs.configs[cfg_prefix]
+        netmap = generate_netids(*networks)
+
+        def update_cluster_networks(conf):
+            logger.info('Updating cluster network configuration for %s'
                         '' % bunit_config.bunit.name)
+            nodes = conf.get('nodes', {})
+            for _node in nodes:
+                networks = _node['networking'].get('networks', [])
+                for _net in networks:
+                    orig = _net['network']
+                    _net['network'] = netmap.get(orig, orig)
 
-
-            raise NotImplementedError()
-            build_config.update(updates)
-            build_config.flush()
-            logger.debug('FLUSHED CONFIGURATION\n%s' %
-                         json.dumps(build_config.contents, indent=1))
         try:
-            netmap = get_net_ids()
-            update_cluster_conf(netmap)
+            with conf.edit() as contents:
+                update_cluster_networks(contents)
             self.set_build_state(bunit, BuildStateEnum.configured)
         except Exception as e:
             raise ConfigurationError(e) from e
 
 
-DEFAULT_ALLOCATOR = V7BuildUnitAllocator
+DEFAULT_ALLOCATOR = V8BuildUnitAllocator
