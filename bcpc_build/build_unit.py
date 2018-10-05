@@ -139,7 +139,7 @@ class BuildUnitAllocator(ABC):
     DEFAULT_BUILD_HOME = '/build'
     DEFAULT_SHELL = '/bin/bash'
     BUILD_STRATEGY_NAMES = ['v7', 'v8']
-    BUILD_STRATEGY_DEFAULT = 'v7'
+    BUILD_STRATEGY_DEFAULT = 'v8'
     SRC_DEPENDS = None
 
     def __init__(self, *args, **kwargs):
@@ -200,14 +200,9 @@ class BuildUnitAllocator(ABC):
         if not os.path.exists(build_home):
             create_build_home()
 
+    # @abstractmethod
     def build(self, bunit):
-        self.set_build_state(bunit, BuildStateEnum.building)
-        build_user = bunit.build_user
-        cmd = ("su -c \"bash -c 'cd chef-bcpc/bootstrap/vagrant_scripts &&"
-               " time ./BOOT_GO.sh'\" -"
-               " {build_user}".format(build_user=build_user))
-        self.logger.debug('Building with command `%s`' % cmd)
-        return self._build_with_command(bunit, cmd)
+        raise NotImplementedError
 
     def _build_with_command(self, bunit, cmd):
         proc = subprocess.Popen(shlex.split(cmd),
@@ -267,7 +262,7 @@ class BuildUnitAllocator(ABC):
             bunit.logger.error('Could not install certificates.')
             sys.exit(e)
 
-    @abstractmethod
+    # @abstractmethod
     def configure(self, bunit, *args, **kwargs):
         """Configures the build unit."""
         raise NotImplementedError()
@@ -485,6 +480,15 @@ class V7BuildUnitAllocator(BuildUnitAllocator):
         export REPO_MOUNT_POINT=/chef-bcpc-host
         export VM_SWAP_SIZE=8192
     """)
+
+    def build(self, bunit):
+        self.set_build_state(bunit, BuildStateEnum.building)
+        build_user = bunit.build_user
+        cmd = ("su -c \"bash -c 'cd chef-bcpc/bootstrap/vagrant_scripts &&"
+               " time ./BOOT_GO.sh'\" -"
+               " {build_user}".format(build_user=build_user))
+        self.logger.debug('Building with command `%s`' % cmd)
+        return self._build_with_command(bunit, cmd)
 
     def configure(self, bunit, *args, **kwargs):
         """Configures the build unit."""
