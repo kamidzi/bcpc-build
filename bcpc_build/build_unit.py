@@ -273,6 +273,9 @@ class BuildUnitAllocator(ABC):
         src_url = bunit.source_url
         build_path = bunit.get_build_path()
         logger = bunit.logger
+        log_level = conf.get('log_level')
+        if log_level is not None:
+            utils.set_log_level(logger, log_level)
 
         # FIXME(kamidzi): git-credential helper?
         def git_args(url):

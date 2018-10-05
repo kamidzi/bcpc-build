@@ -9,6 +9,10 @@ from bcpc_build.net import NetworkIDGenerator
 from .vbox import *
 
 
+def set_log_level(logger, level):
+    return logger.setLevel(level)
+
+
 def generate_netids(*names):
     return {
         n: netid_from_name(n) for n in names
