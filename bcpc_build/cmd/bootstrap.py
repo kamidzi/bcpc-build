@@ -1,3 +1,9 @@
+from configparser import ConfigParser
+import json
+import shlex
+import subprocess
+import sys
+
 from bcpc_build.build_unit import BuildLogger
 from bcpc_build.build_unit import BuildStateEnum
 from bcpc_build.build_unit import BuildUnitAllocator
@@ -6,22 +12,13 @@ from bcpc_build.cmd.exceptions import CommandNotImplementedError
 from bcpc_build.dec import *
 from bcpc_build.exceptions import AllocationError
 from bcpc_build.exceptions import BuildError
+from bcpc_build.exceptions import ConfigurationError
 from bcpc_build.exceptions import ProvisionError
-from configparser import ConfigParser
+from . import logger
 import click
-import shlex
-import subprocess
-import sys
-try:
-    import simplejson as json
-except ImportError:
-    import json
 
 
 DEPENDS_SPEC_SEP = '='
-
-
-from bcpc_build.exceptions import ConfigurationError
 
 
 class InvalidDependsError(ConfigurationError):
@@ -49,10 +46,14 @@ class InvalidDependsError(ConfigurationError):
               help='Run the build phase.')
 @click.option('--wait/--no-wait', default=False,
               help='Wait for bootstrap to complete in foreground.')
+@click.option('--log-level', default='INFO',
+              type=click.Choice(list(logger.logging._levelToName.values())))
 @click.pass_context
 @click.argument('name', default='')
 def bootstrap(ctx, config_file, source_url, depends,
-              strategy, configure, build, wait, name):
+              strategy, configure, build, wait, log_level, name):
+    logger.set_log_level(log_level)
+    log = logger.LOG
     def _parse_conf(conffile):
         cfg = ConfigParser()
         cfg.read_file(conffile)
@@ -85,6 +86,9 @@ def bootstrap(ctx, config_file, source_url, depends,
 
     def do_bootstrap(source_url):
         allocator = BuildUnitAllocator.get_allocator(conf=conf)
+        log.info(
+            'Using allocator type {}'.format(allocator.__class__.__name__)
+        )
         allocator.setup()
         bunit = None
         try:
