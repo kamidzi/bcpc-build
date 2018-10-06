@@ -1,5 +1,7 @@
 from abc import ABC
 from abc import abstractmethod
+from configparser import ConfigParser
+from configparser import Error as ConfigParserError
 import contextlib
 import json
 import os.path
@@ -20,16 +22,49 @@ class DecodeError(ValueError):
 
 def ConfigFile(name, filename):
     """Factory for <Type>ConfigFile objects."""
-    for fmt, cls in AVAILABLE_FORMATS:
+    def _reorder(key):
+        key, cls = key
+
+        ext = os.path.splitext(filename)[-1]
+
+        def ext_to_key():
+            return ext[1:] if ext.startswith('.') else ext
+
+        if ext_to_key() == key:
+            return 0
+        return 1
+
+    order = sorted(AVAILABLE_FORMATS, key=_reorder)
+    for fmt, cls in order:
         open_fn = cls.get_loader()
         try:
             with open(filename) as f:
-                open_fn(f)
-                return cls(name, filename)
+                return cls(name, filename, contents=open_fn(f))
         except DecodeError:
             continue
 
     raise UnknownConfigFileFormat(filename)
+
+
+def ini_load(fp):
+    """Thin wrapper around json.load()."""
+    try:
+        parser = ConfigParser()
+        parser.read_file(fp)
+
+        def _enum_items(obj):
+            for k in obj:
+                yield (k, obj[k])
+
+        def to_dict():
+            return {
+                section: dict(_enum_items(items))
+                for section, items in parser.items()
+            }
+
+        return to_dict()
+    except ConfigParserError as e:
+        raise DecodeError(fp) from e
 
 
 def json_load(fp):
@@ -42,17 +77,20 @@ def json_load(fp):
 
 def yaml_load(fp):
     """Thin wrapper around yaml.load()."""
-    obj = yaml.load(fp)
-    if obj is None:
-        raise DecodeError(fp)
-    return obj
+    try:
+        obj = yaml.load(fp)
+        if obj is None:
+            raise DecodeError(fp)
+        return obj
+    except yaml.parser.ParserError as e:
+        raise DecodeError(fp) from e
 
 
 class _ConfigFile(ABC):
-    def __init__(self, name, filename):
+    def __init__(self, name, filename, contents=None):
         self.name = name
         self.filename = filename
-        self.refresh()
+        self.refresh(contents)
 
     @staticmethod
     @abstractmethod
@@ -63,7 +101,12 @@ class _ConfigFile(ABC):
     def contents(self):
         return self._contents
 
-    def refresh(self):
+    def refresh(self, contents=None):
+        if contents is None:
+            # TODO(kmidzi): is copy necessary?
+            self._contents = contents.copy()
+            return
+
         try:
             with open(self.filename, 'r') as f:
                 loader = self.get_loader()
@@ -135,7 +178,25 @@ class JSONConfigFile(_ConfigFile):
             f.flush()
 
 
-AVAILABLE_FORMATS = (('json', JSONConfigFile), ('yaml', YAMLConfigFile))
+class INIConfigFile(_ConfigFile):
+    @staticmethod
+    def get_loader():
+        return ini_load
+
+    @contextlib.contextmanager
+    def edit(self):
+        with super().edit() as value:
+            yield value
+
+    def _flush(self):
+        raise NotImplementedError
+
+
+AVAILABLE_FORMATS = [
+    ('json', JSONConfigFile),
+    ('yaml', YAMLConfigFile),
+    ('ini', INIConfigFile),
+]
 
 
 class ConfigHandler(ABC):
