@@ -119,18 +119,28 @@ for c in _AVAILABLE_CONTEXTS:
 
 
 @contextlib.contextmanager
-def impersonate(username, setegid=True, setgid=False):
+def impersonate(username, setegid=True, setgid=False, chdir=True):
     try:
         pw_ent = getpwnam(username)
     except KeyError as e:
         raise UserImpersonationError from e
+    dir_changed = False
     try:
+        cwd = os.curdir
         with contextlib.ExitStack() as stack:
             if setgid:
+                orig_egid = os.getegid()
                 stack.enter_context(switch_gid(pw_ent.pw_gid))
-            elif setegid:
+                if not setegid:
+                    stack.enter_context(switch_egid(orig_egid))
+            elif setegid and not setgid:
                 stack.enter_context(switch_egid(pw_ent.pw_gid))
+
+            if chdir:
+                os.chdir(pw_ent.pw_dir)
+                dir_changed = True
             stack.enter_context(switch_euid(pw_ent.pw_uid))
             yield
     finally:
-        pass
+        if dir_changed:
+            os.chdir(cwd)
