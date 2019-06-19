@@ -277,6 +277,15 @@ class BuildUnitAllocator(ABC):
         if log_level is not None:
             utils.set_log_level(logger, log_level)
 
+        def _load_creds(config):
+            if 'filename' in config:
+                # TODO(kamidzi): handle error and flesh out
+                with open(config['filename']) as fp:
+                    raise NotImplementedError(
+                        'Loading credentials from filename not supported.'
+                    )
+
+
         # FIXME(kamidzi): git-credential helper?
         def git_args(url):
             url = furl(url)
