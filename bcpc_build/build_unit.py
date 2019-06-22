@@ -566,20 +566,23 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         core_configs = config_handler.configs['chef-bcpc']
         cfg_prefix = 'topology/topology.yml'
         conf = core_configs.configs[cfg_prefix]
-        netmap = generate_netids(*networks)
+        netmap = utils.generate_netids(*networks)
 
         def update_cluster_networks(conf):
             logger.info('Updating cluster network configuration for %s'
                         '' % bunit_config.bunit.name)
             nodes = conf.get('nodes', {})
             for _node in nodes:
-                networks = _node['networking'].get('networks', [])
-                for _net in networks:
-                    orig = _net['network']
-                    _net['network'] = netmap.get(orig, orig)
+                # only get transit interfaces?
+                ifaces = _node['host_vars']['interfaces']['transit']
+                for iface in ifaces:
+                    net = iface.get('neighbor', {}).get('name')
+                    if net:
+                        iface['neighbor']['name'] = netmap.get(net, net)
+            return conf
 
         try:
-            with conf.edit() as contents:
+            with conf.edit(backup=True) as contents:
                 update_cluster_networks(contents)
             self.set_build_state(bunit, BuildStateEnum.configured)
         except Exception as e:
