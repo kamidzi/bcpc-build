@@ -136,10 +136,11 @@ class BuildLogger(object):
 
 class BuildUnitAllocator(ABC):
     BUILD_DIR_PREFIX = 'chef-bcpc.'
+    BUILD_STRATEGY_DEFAULT = 'v8'
+    BUILD_STRATEGY_NAMES = ['v7', 'v8']
     DEFAULT_BUILD_HOME = '/build'
     DEFAULT_SHELL = '/bin/bash'
-    BUILD_STRATEGY_NAMES = ['v7', 'v8']
-    BUILD_STRATEGY_DEFAULT = 'v8'
+    DEFAULT_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
     SRC_DEPENDS = None
 
     def __init__(self, *args, **kwargs):
@@ -277,15 +278,6 @@ class BuildUnitAllocator(ABC):
         if log_level is not None:
             utils.set_log_level(logger, log_level)
 
-        def _load_creds(config):
-            if 'filename' in config:
-                # TODO(kamidzi): handle error and flesh out
-                with open(config['filename']) as fp:
-                    raise NotImplementedError(
-                        'Loading credentials from filename not supported.'
-                    )
-
-
         # FIXME(kamidzi): git-credential helper?
         def git_args(url):
             url = furl(url)
@@ -300,10 +292,9 @@ class BuildUnitAllocator(ABC):
                     args['git'] += ' -c %s.proxy="%s"' % (scheme, proxy)
 
             if 'credentials' in conf:
-                logger.debug('Detected credentials in configuration')
-                creds = conf['credentials']
-                url.set(username=creds['username'],
-                        password=creds['password'])
+                logger.debug(
+                    'Detected credentials in configuration: ignoring...'
+                )
             args['url'] = url.url
             try:
                 path, rev = str(path).split('/tree/')
@@ -317,12 +308,12 @@ class BuildUnitAllocator(ABC):
 
         def get_cmds(url, name):
             def _checkout_cmd(rev, dest):
-                cmd = ("su -c"
-                       " 'git -C {dest} fetch origin {rev} &&"
-                       " git -C {dest} checkout FETCH_HEAD' "
-                       " {username}").format(rev=rev,
-                                             username=bunit.build_user,
-                                             dest=dest)
+                cmd = (
+                    "su -c"
+                    " 'git -C {dest} fetch origin {rev} &&"
+                    " git -C {dest} checkout FETCH_HEAD' "
+                    " {username}"
+                ).format(rev=rev, username=bunit.build_user, dest=dest)
                 logger.debug('Checkout cmd `{}` from rev={}'.format(cmd, rev))
                 yield cmd
 
@@ -470,7 +461,6 @@ class BuildUnitAllocator(ABC):
 
 class V7BuildUnitAllocator(BuildUnitAllocator):
     DEFAULT_BUILD_STRATEGY = 'v7'
-    DEFAULT_SRC_URL = 'https://github.com/bloomberg/chef-bcpc'
     CONF_TEMPLATE = dedent("""\
         export BCPC_VM_DIR=${build_dir}/bcpc-vms
         export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
@@ -540,39 +530,6 @@ class V7BuildUnitAllocator(BuildUnitAllocator):
 
 class V8BuildUnitAllocator(BuildUnitAllocator):
     DEFAULT_BUILD_STRATEGY = 'v8'
-    CONF_TEMPLATE = dedent("""\
-        export BCPC_HYPERVISOR_DOMAIN=hypervisor-bcpc.example.com
-        export BCPC_VM_DIR=${build_dir}/bcpc-vms
-        export BOOTSTRAP_ADDITIONAL_CACERTS_DIR=${build_dir}/cacerts
-        export BOOTSTRAP_APT_MIRROR=
-        export BOOTSTRAP_CACHE_DIR=${build_dir}/.bcpc-cache
-        export BOOTSTRAP_CHEF_DO_CONVERGE=1
-        export BOOTSTRAP_CHEF_ENV=Test-Laptop-Vagrant-Multirack
-        export BOOTSTRAP_DNS_RESOLVER=10.10.10.10
-        export BOOTSTRAP_DOMAIN=bcpc.example.com
-        export BOOTSTRAP_HTTP_PROXY_URL=${http_proxy_url}
-        export BOOTSTRAP_HTTPS_PROXY_URL=${https_proxy_url}
-        export BOOTSTRAP_VM_CPUS=2
-        export BOOTSTRAP_VM_DRIVE_SIZE=20480
-        export BOOTSTRAP_VM_MEM=4096
-        export CLUSTER=multirack
-        export CLUSTER_VM_CPUS=2
-        export CLUSTER_VM_DRIVE_SIZE=20480
-        export CLUSTER_VM_MEM=3072
-        export CLUSTER_VM_MEM=8192
-        export FILECACHE_MOUNT_POINT=/chef-bcpc-files
-        export MONITORING_NODES=0
-        export MONITORING_NODES=3
-        export REPO_MOUNT_POINT=/chef-bcpc-host
-        export REPO_MOUNT_POINT=/chef-bcpc-host
-        export VM_SWAP_SIZE=8192
-    """)
-    DEFAULT_SRC_URL = (
-        'https://github.com/BCPC/chef-bcpc/tree/v8/xenial'
-    )
-    SRC_DEPENDS = {
-        'leafy-spines': 'https://repo.example.com/private/leafy-spines'
-    }
 
     def _base_build(self, bunit):
         build_user = bunit.build_user
