@@ -8,12 +8,16 @@ if __name__ == '__main__':
     import sys
 
     session = utils.Session()
-    id_ = '48d00e2d-8832-40c7-8c13-acfba3b6e671'
-    id_ = '40b638b7-5a0a-47c6-99c4-732d296bb34f'
+    try:
+        id_ = sys.argv[1]
+    except IndexError:
+        id_ = 'a6fa8c50-2bc3-4282-bd8b-9426b3bb06bb'
+
     try:
         # This will not have `logger` attribute
         bunit = session.query(BuildUnit).get(id_)
         import logging
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
         bunit.logger = logging.getLogger(__name__)
     except sa.exc.SQLAlchemyError as e:
         sys.exit(e)
