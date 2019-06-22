@@ -6,6 +6,7 @@ import contextlib
 import json
 import os.path
 import yaml
+import warnings
 
 
 class ConfigurationError(Exception):
@@ -47,7 +48,7 @@ def ConfigFile(name, filename):
 
 
 def ini_load(fp):
-    """Thin wrapper around json.load()."""
+    """Thin wrapper around read_file() for INI files."""
     try:
         parser = ConfigParser()
         parser.read_file(fp)
@@ -115,10 +116,23 @@ class _ConfigFile(ABC):
             raise Exception('Could not initialize contents.') from e
 
     @contextlib.contextmanager
-    @abstractmethod
-    def edit(self):
+    def edit(self, backup=False):
+        if backup:
+            self._backup()
         with self.flush():
             yield self.contents
+
+    def _backup(self, dest=None):
+        if dest is None:
+            # TODO(kamidzi): naive
+            dest = self.filename + '.bak'
+        try:
+            with open(dest, 'w') as fp:
+                self._dump(fp)
+        except IOError:
+            warnings.warn(
+                'Configuration file backup failed - {}.'.format(dest)
+            )
 
     def transform(self, *funcs, flush=False, delayed_flush=True, **kwargs):
         try:
@@ -133,8 +147,13 @@ class _ConfigFile(ABC):
                 self.flush()
 
     @abstractmethod
-    def _flush(self):
+    def _dump(self, f):
         raise NotImplementedError()
+
+    def _flush(self):
+        with open(self.filename, 'w') as f:
+            self._dump(f)
+            f.flush()
 
     @contextlib.contextmanager
     def flush(self):
@@ -149,15 +168,8 @@ class YAMLConfigFile(_ConfigFile):
     def get_loader():
         return yaml_load
 
-    @contextlib.contextmanager
-    def edit(self):
-        with super().edit() as value:
-            yield value
-
-    def _flush(self):
-        with open(self.filename, 'w') as f:
-            yaml.dump(self._contents, f)
-            f.flush()
+    def _dump(self, f):
+        yaml.dump(self._contents, f)
 
 
 class JSONConfigFile(_ConfigFile):
@@ -167,15 +179,8 @@ class JSONConfigFile(_ConfigFile):
     def get_loader():
         return json_load
 
-    @contextlib.contextmanager
-    def edit(self):
-        with super().edit() as value:
-            yield value
-
-    def _flush(self):
-        with open(self.filename, 'w') as f:
-            json.dump(self._contents, f, indent=self.DEFAULT_SPACES)
-            f.flush()
+    def _dump(self, f):
+        json.dump(self._contents, f, indent=self.DEFAULT_SPACES)
 
 
 class INIConfigFile(_ConfigFile):
@@ -183,12 +188,10 @@ class INIConfigFile(_ConfigFile):
     def get_loader():
         return ini_load
 
-    @contextlib.contextmanager
-    def edit(self):
-        with super().edit() as value:
-            yield value
-
     def _flush(self):
+        raise NotImplementedError
+
+    def _dump(self, f):
         raise NotImplementedError
 
 
