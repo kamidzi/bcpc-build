@@ -264,9 +264,12 @@ def _get_net_extractor(component, parent):
             nodes = config['nodes']
 
             def _host_nets(host):
-                host_nets = host['networking']['networks']
-                for net in host_nets:
-                    yield net['network']
+                # only get transit interfaces?
+                ifaces = host['host_vars']['interfaces']['transit']
+                for iface in ifaces:
+                    net = iface.get('neighbor', {}).get('name')
+                    if net:
+                        yield net
 
             def _all_nets():
                 for host in nodes:
@@ -341,13 +344,12 @@ def _enumerate_leafy_spines_config_paths(parent):
 
 
 COMPONENT_CONFIG_FILE_PATHS = {
-    'leafy-spines': _enumerate_leafy_spines_config_paths,
     'chef-bcpc':  _enumerate_chef_bcpc_config_paths
 }
 
 
 class V8ConfigHandler(ConfigHandler):
-    COMPONENTS = ('chef-bcpc', 'leafy-spines')
+    COMPONENTS = ('chef-bcpc',)
 
     def __init__(self, bunit, *args, **kwargs):
         super().__init__(bunit)

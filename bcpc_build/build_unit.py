@@ -558,7 +558,8 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         self.set_build_state(bunit, BuildStateEnum.configuring)
 
         # update the networks with generated ids
-        comp = 'leafy-spines'
+        comp = 'chef-bcpc'
+        config_handler = bunit_config
         nt_component_conf = config_handler.configs[comp]
         networks = list(config_handler.configs[comp].enumerate_nets())
 
