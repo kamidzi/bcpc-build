@@ -2,6 +2,7 @@ from abc import ABC
 from abc import abstractmethod
 from configparser import ConfigParser
 from configparser import Error as ConfigParserError
+from shutil import copy2
 import contextlib
 import json
 import os.path
@@ -127,8 +128,7 @@ class _ConfigFile(ABC):
             # TODO(kamidzi): naive
             dest = self.filename + '.bak'
         try:
-            with open(dest, 'w') as fp:
-                self._dump(fp)
+            copy2(self.filename, dest)
         except IOError:
             warnings.warn(
                 'Configuration file backup failed - {}.'.format(dest)
@@ -169,7 +169,9 @@ class YAMLConfigFile(_ConfigFile):
         return yaml_load
 
     def _dump(self, f):
-        yaml.dump(self._contents, f)
+        # This is to ensure proper type conversion when
+        # loaded by different language bindings; e.g., ruby
+        yaml.dump(self._contents, f, default_style="'")
 
 
 class JSONConfigFile(_ConfigFile):
