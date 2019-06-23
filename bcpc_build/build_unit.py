@@ -311,8 +311,8 @@ class BuildUnitAllocator(ABC):
             def _checkout_cmd(rev, dest):
                 cmd = (
                     "su -c"
-                    " 'git -C {dest} fetch origin {rev} &&"
-                    " git -C {dest} checkout FETCH_HEAD' "
+                    " 'git -C {dest} fetch -q origin {rev} &&"
+                    " git -C {dest} checkout -q FETCH_HEAD' "
                     " {username}"
                 ).format(rev=rev, username=bunit.build_user, dest=dest)
                 logger.debug('Checkout cmd `{}` from rev={}'.format(cmd, rev))
