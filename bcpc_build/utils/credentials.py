@@ -119,7 +119,20 @@ for c in _AVAILABLE_CONTEXTS:
 
 
 @contextlib.contextmanager
-def impersonate(username, setegid=True, setgid=False, chdir=True):
+def env(mapping):
+    oldenv = os.environ.copy()
+    try:
+        os.environ.update(mapping)
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(oldenv)
+
+
+@contextlib.contextmanager
+def impersonate(
+    username, setegid=True, setgid=False, chdir=True, set_home=False
+):
     try:
         pw_ent = getpwnam(username)
     except KeyError as e:
@@ -139,6 +152,10 @@ def impersonate(username, setegid=True, setgid=False, chdir=True):
             if chdir:
                 os.chdir(pw_ent.pw_dir)
                 dir_changed = True
+
+            if set_home:
+                stack.enter_context(env({'HOME': pw_ent.pw_dir}))
+
             stack.enter_context(switch_euid(pw_ent.pw_uid))
             yield
     finally:
