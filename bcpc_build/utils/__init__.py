@@ -34,12 +34,6 @@ def netid_from_name(name):
     return netid
 
 
-def get_vbox_sysprop(key):
-    if VBOX_SYSTEM_PROPERTIES is None:
-        _init_vbox_sysprops()
-    return VBOX_SYSTEM_PROPERTIES[key]
-
-
 def userdel(username, *args, **kwargs):
     kwargs = kwargs.copy()
     kwargs['args'] = '-r -f '

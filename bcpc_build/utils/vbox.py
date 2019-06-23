@@ -61,12 +61,9 @@ else:
         )
 
 
-_init_vbox_sysprops()
-
-
-def get_vbox_sysprop(key):
+def get_vbox_sysprop(key, refresh=False):
     global VBOX_SYSTEM_PROPERTIES
-    if VBOX_SYSTEM_PROPERTIES is None:
+    if VBOX_SYSTEM_PROPERTIES is None or refresh:
         _init_vbox_sysprops()
     try:
         return VBOX_SYSTEM_PROPERTIES[key]
