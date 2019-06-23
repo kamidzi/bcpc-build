@@ -122,7 +122,8 @@ def bootstrap(ctx, config_file, source_url, depends,
             allocator.set_build_state(bunit, BuildStateEnum.failed_build)
             raise click.ClickException(e) from e
         except (Exception, ) as e:
-            allocator.set_build_state(bunit, BuildStateEnum.failed)
+            if bunit:
+                allocator.set_build_state(bunit, BuildStateEnum.failed)
             raise click.ClickException(e) from e
 
     if not wait:
