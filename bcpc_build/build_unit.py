@@ -285,6 +285,7 @@ class BuildUnitAllocator(ABC):
             scheme = url.scheme
             # Translate branch url to git arguments
             args = {}
+            args['clone'] = '-n -q'
             args['git'] = '-C %s' % build_path
             if scheme in conf:
                 proxy = conf[scheme].get('proxy')
@@ -318,13 +319,16 @@ class BuildUnitAllocator(ABC):
                 yield cmd
 
             def _clone_cmd(src_url, name=''):
-                cmd = ("su -c 'git {git_args} clone {clone_args} {url} {name}' "
-                       "{username}").format(git_args=args.get('git', ''),
-                                            clone_args=args.get('clone', ''),
-                                            url=args.get('url'),
-                                            name=name,
-                                            username=bunit.build_user)
-                logger.debug('Clone cmd `{}` from src_url={}'.format(cmd, src_url))
+                cmd = (
+                    "su -c 'git {git_args} clone {clone_args} {url} {name}' "
+                    "{username}"
+                ).format(
+                    git_args=args.get('git', ''),
+                    clone_args=args.get('clone', ''), url=args.get('url'),
+                    name=name, username=bunit.build_user
+                )
+                logger.debug(
+                    'Clone cmd `{}` from src_url={}'.format(cmd, src_url))
                 yield cmd
 
             cmds = []
@@ -533,20 +537,15 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
 
     def _base_build(self, bunit):
         build_user = bunit.build_user
-        cmd = ("su -c \"bash -c 'cd chef-bcpc && time make create all'"
+        cmd = ("su -c \"bash -c 'cd chef-bcpc && time make create all'\""
                " - {build_user}".format(build_user=build_user))
         self.logger.debug('Building with command `%s`' % cmd)
         return self._build_with_command(bunit, cmd)
 
     def build(self, bunit):
-        build_user = bunit.build_user
-        cmd = ("su -c \"bash -c 'cd leafy-spines &&"
-               " vagrant up'\" - {build_user}".format(build_user=build_user))
-        self.logger.debug('Building dependencies with command: `%s`' % cmd)
         base = self._base_build(bunit)
-        deps = self._build_with_command(bunit, cmd)
         self.set_build_state(bunit, BuildStateEnum.building)
-        return chain(deps, base)
+        return base
 
     def get_build_config(self, bunit):
         bconf = V8ConfigHandler(bunit)
@@ -583,6 +582,8 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
 
         try:
             with conf.edit(backup=True) as contents:
+                logger.debug(
+                    'Originally loaded data:\n{data}'.format(data=contents))
                 update_cluster_networks(contents)
             self.set_build_state(bunit, BuildStateEnum.configured)
         except Exception as e:
