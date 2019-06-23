@@ -173,14 +173,11 @@ class BuildUnitAllocator(ABC):
     @property
     def session(self):
         if self._session is None:
-            self._session = self._get_session()
+            engine = create_engine(config.db.url)
+            conn = engine.connect()
+            Session = sessionmaker(bind=conn)
+            self._session = Session()
         return self._session
-
-    def _get_session(self):
-        engine = create_engine(config.db.url)
-        conn = engine.connect()
-        Session = sessionmaker(bind=conn)
-        return Session()
 
     @property
     def conf(self):
@@ -232,7 +229,6 @@ class BuildUnitAllocator(ABC):
                 if output:
                     yield output
         except NonZeroExit as e:
-            # This is necessary as session is dirty
             self.set_build_state(bunit, BuildStateEnum.failed_build)
             raise BuildError(e) from e
 
@@ -240,11 +236,10 @@ class BuildUnitAllocator(ABC):
         if not isinstance(state, BuildStateEnum):
             raise ValueError('Incompatible build state.')
 
+        # TODO(kmidzi): re-using same session. Issues?
         bunit.build_state = state
-        sess = self._get_session()
-        sess.add(bunit)
-        sess.commit()
-        sess.close()
+        self.session.add(bunit)
+        self.session.commit()
 
     def install_certs(self, bunit):
         CERTS_DIR = '/var/tmp/bcpc-cacerts'
