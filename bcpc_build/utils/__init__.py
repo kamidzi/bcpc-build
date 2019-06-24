@@ -7,21 +7,29 @@ from subprocess import check_output
 
 from bcpc_build.net import NetworkIDGenerator
 from .vbox import *
+from .vbox import _init_vbox_sysprops_from_system
 
 
 __all__ = [
-    'set_log_level',
     'generate_netids',
-    'netid_from_name',
-    'userdel',
-    'useradd',
+    'generate_netids_from_system',
     'kill_proc_tree',
-    'logger'
+    'logger',
+    'netid_from_name',
+    'set_log_level',
+    'useradd',
+    'userdel',
 ]
 
 
 def set_log_level(logger, level):
     return logger.setLevel(level)
+
+
+def generate_netids_from_system(*names):
+    return {
+        n: netid_from_name(n, system=True) for n in names
+    }
 
 
 def generate_netids(*names):
@@ -30,7 +38,11 @@ def generate_netids(*names):
     }
 
 
-def netid_from_name(name):
+def netid_from_name(name, system=False):
+    if system:
+        # Make sure to query system outside of vboxapi
+        _init_vbox_sysprops_from_system()
+
     vm_dir = get_vbox_sysprop('default_machine_folder')
     uid = os.geteuid()
     # TODO(kmidzi): mapping keys need spec

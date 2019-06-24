@@ -8,31 +8,33 @@ class NoSuchPropertyError(ValueError):
 
 
 VBOX_SYSTEM_PROPERTIES = None
-
-
 verinfo = sys.version_info
+
+
+# vboxapi only *properly* supported with python3.5 on xenial
+def _init_vbox_sysprops_from_system():
+    global VBOX_SYSTEM_PROPERTIES
+    cmd = 'VBoxManage list systemproperties'
+    try:
+        out = check_output(shlex.split(cmd))
+        props = filter(None, out.decode('utf-8').split('\n'))
+
+        def _normalize_key(x):
+            return x.replace(' ', '_').lower()
+
+        def _extract_kv(line):
+            key, value = line.split(':')
+            return (_normalize_key(key), value.strip())
+
+        VBOX_SYSTEM_PROPERTIES = dict(map(_extract_kv, props))
+    except Exception as e:
+        raise RuntimeError(
+            'Failed to enumerate Virtualbox System Properties'
+        ) from e
+
+
 if not (verinfo.major == 3 and verinfo.minor == 5):
-    # vboxapi only *properly* supported with python3.5 on xenial
-    def _init_vbox_sysprops():
-        global VBOX_SYSTEM_PROPERTIES
-        cmd = 'VBoxManage list systemproperties'
-        try:
-            out = check_output(shlex.split(cmd))
-            props = filter(None, out.decode('utf-8').split('\n'))
-
-            def _normalize_key(x):
-                return x.replace(' ', '_').lower()
-
-            def _extract_kv(line):
-                key, value = line.split(':')
-                return (_normalize_key(key), value.strip())
-
-            VBOX_SYSTEM_PROPERTIES = dict(map(_extract_kv, props))
-        except Exception as e:
-            raise RuntimeError(
-                'Failed to enumerate Virtualbox System Properties'
-            ) from e
-
+    _init_vbox_sysprops = _init_vbox_sysprops_from_system
 else:
     import virtualbox
     # see %VBOX_SDK_PATH%/bindings/xpcom/python/xpcom/vboxxpcom.py for why...
@@ -42,7 +44,7 @@ else:
     except ImportError:
         _prop_exc = (Exception,)
 
-    def _init_vbox_sysprops():
+    def _init_vbox_sysprops_from_vboxapi():
         global VBOX_SYSTEM_PROPERTIES
         _sysprops = virtualbox.VirtualBox().system_properties
         _sysprop_keys = list(filter(
@@ -59,6 +61,7 @@ else:
         VBOX_SYSTEM_PROPERTIES = dict(
             filter(None, map(_extract_prop_kv, _sysprop_keys))
         )
+    _init_vbox_sysprops = _init_vbox_sysprops_from_vboxapi
 
 
 def get_vbox_sysprop(key, refresh=False):
