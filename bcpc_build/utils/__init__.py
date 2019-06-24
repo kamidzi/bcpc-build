@@ -9,6 +9,17 @@ from bcpc_build.net import NetworkIDGenerator
 from .vbox import *
 
 
+__all__ = [
+    'set_log_level',
+    'generate_netids',
+    'netid_from_name',
+    'userdel',
+    'useradd',
+    'kill_proc_tree',
+    'logger'
+]
+
+
 def set_log_level(logger, level):
     return logger.setLevel(level)
 
@@ -58,6 +69,7 @@ def useradd(username, *args, **kwargs):
 
 
 logger = logging.getLogger(__name__)
+
 
 # https://psutil.readthedocs.io/en/latest/#kill-process-tree
 def kill_proc_tree(
