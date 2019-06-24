@@ -1,12 +1,15 @@
+from os import setuid
 from os import geteuid
+from os import seteuid
+from os import setegid
+import os
 from pwd import getpwnam
 import contextlib
 import sys
 
-from bcpc_build.net import NetworkIDGenerator
 from bcpc_build.utils.vbox import get_vbox_sysprop
-from bcpc_build.utils.credentials import impersonate
-from bcpc_build.utils.credentials import UserContextSwitchError
+from bcpc_build.utils import netid_from_name
+from bcpc_build.utils.credentials import env
 
 # contextlib.nullcontext only in python3.7+
 @contextlib.contextmanager
@@ -30,28 +33,23 @@ if __name__ == '__main__':
     #   [label, id].join('-')
     # end
 
+    new_uid = None
     try:
         username = sys.argv[1]
-        getpwnam(username)
+        pw_ent = getpwnam(username)
+        new_uid = pw_ent.pw_uid
         sys.argv.pop(1)
-        cm = impersonate(username)
-    except:
-        cm = nullcontext()
+    except Exception as e:
+        sys.exit(e)
         
-    try:
-        with cm:
-            vm_dir = get_vbox_sysprop('default_machine_folder')
-            print(vm_dir)
-            uid = geteuid() 
-            for label in sys.argv[1:]:
-                mapping = dict(
-                    label=label,
-                    uid=uid,
-                    virtualbox_vm_dir=vm_dir
-                )
-                name = '{}-{}'.format(
-                    label, NetworkIDGenerator.generate_id(mapping)
-                )
-                print('{}: {}'.format(label, name))
-    except UserContextSwitchError:
-        sys.exit('Failed to switch user to `{}`'.format(username))
+    if new_uid:
+        setuid(new_uid)
+    #    setegid(new_uid)
+    #    seteuid(new_uid)
+    with env({'HOME': pw_ent.pw_dir}):
+        vm_dir = get_vbox_sysprop('default_machine_folder')
+
+    print(vm_dir)
+    for label in sys.argv[1:]:
+        print(label, netid_from_name(label))
+
