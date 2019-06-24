@@ -11,6 +11,14 @@ import furl
 import click
 
 
+@contextlib.contextmanager
+def nullcontext():
+    try:
+        yield
+    finally:
+        pass
+
+
 class NoSuchActionError(RuntimeError):
     pass
 
@@ -130,9 +138,20 @@ def env(mapping):
         os.environ.clear()
         os.environ.update(oldenv)
 
+
+@contextlib.contextmanager
+def chdir(dest):
+    curdir = os.curdir
+    try:
+        os.chdir(dest)
+    finally:
+        # TODO(kamidzi): possible with impersonation, this could fail
+        os.chdir(curdir)
+
+
 def impersonated_thread(
     username, target, args=(),
-    setegid=True, setgid=False, chdir=True, set_home=False
+    setegid=True, setgid=False, chdir=True, set_home=True
 ):
 #    try:
 #        pw_ent = getpwnam(username)
@@ -161,9 +180,11 @@ def impersonated_thread(
                 os.chdir(pw_ent.pw_dir)
 
             if set_home:
-                with env({'HOME': pw_ent.pw_dir}):
-                    return target.__call__(*args)
-            ret = target.__call__(*args)
+                cm = env({'HOME': pw_ent.pw_dir})
+            else:
+                cm = nullcontext()
+            with cm:
+                ret = target.__call__(*args)
             que_.put(ret)
             return ret
         except (KeyError):

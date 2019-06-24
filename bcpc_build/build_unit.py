@@ -1,29 +1,33 @@
 from abc import ABC
 from abc import abstractmethod
-from bcpc_build.db.models.build_unit import BuildUnitBase
-from bcpc_build.db.models.build_unit import BuildStateEnum
-from bcpc_build.exceptions import *
-from bcpc_build import config
-from bcpc_build import utils
-from bcpc_build.unit import V8ConfigHandler
 from collections import OrderedDict
 from functools import total_ordering
-from furl import furl
 from itertools import chain
-from psutil import process_iter
 from pwd import getpwnam
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from subprocess import check_output
 from textwrap import dedent
 import logging
 import os
 import shlex
-import shortuuid
 import shutil
 import string
 import subprocess
 import sys
+
+from furl import furl
+from psutil import process_iter
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import shortuuid
+
+from bcpc_build.db.models.build_unit import BuildStateEnum
+from bcpc_build.db.models.build_unit import BuildUnitBase
+from bcpc_build.exceptions import *
+from bcpc_build import config
+from bcpc_build import utils
+from bcpc_build.unit import V8ConfigHandler
+from bcpc_build.utils.credentials import impersonated_thread
+
 try:
     import simplejson as json
 except ImportError:
@@ -565,7 +569,10 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         core_configs = config_handler.configs['chef-bcpc']
         cfg_prefix = 'topology/topology.yml'
         conf = core_configs.configs[cfg_prefix]
-        netmap = utils.generate_netids(*networks)
+        netmap = impersonated_thread(
+            bunit.build_user, utils.generate_netids_from_system, args=networks,
+            chdir=False
+        )
 
         def update_cluster_networks(conf):
             logger.info('Updating cluster network configuration for %s'
