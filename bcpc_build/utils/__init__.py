@@ -4,6 +4,7 @@ import signal
 import psutil
 import logging
 from subprocess import check_output
+from os.path import abspath
 
 from bcpc_build.net import NetworkIDGenerator
 from .vbox import *
@@ -16,10 +17,24 @@ __all__ = [
     'kill_proc_tree',
     'logger',
     'netid_from_name',
+    'proc_info',
     'set_log_level',
     'useradd',
     'userdel',
 ]
+
+
+def proc_info():
+    keys = ('uid', 'gid', 'euid', 'egid')
+
+    def enum_info():
+        for k in keys:
+            funcname = 'get{}'.format(k)
+            func = getattr(os, funcname)
+            yield (funcname, func.__call__())
+        yield ('curdir', abspath(os.curdir))
+
+    return dict(enum_info())
 
 
 def set_log_level(logger, level):
