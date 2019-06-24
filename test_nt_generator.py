@@ -8,7 +8,8 @@ import contextlib
 import sys
 
 from bcpc_build.utils.vbox import get_vbox_sysprop
-from bcpc_build.utils import netid_from_name
+from bcpc_build.utils import generate_netids_from_system
+from bcpc_build.utils import generate_netids
 from bcpc_build.utils.credentials import impersonated_thread
 
 # contextlib.nullcontext only in python3.7+
@@ -30,7 +31,6 @@ if __name__ == '__main__':
     def do_work():
         vm_dir = get_vbox_sysprop('default_machine_folder')
         print(vm_dir)
-        for label in sys.argv[1:]:
-            print(label, netid_from_name(label))
+        print(generate_netids_from_system(*sys.argv[1:]))
 
-    impersonated_thread(username, do_work)
+    impersonated_thread(username, do_work, set_home=True, chdir=False)
