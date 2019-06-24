@@ -3,6 +3,8 @@ from warnings import warn
 import contextlib
 import os
 import sys
+import threading
+import queue
 
 from bcpc_build.unit import ConfigFile
 import furl
@@ -128,36 +130,59 @@ def env(mapping):
         os.environ.clear()
         os.environ.update(oldenv)
 
-
-@contextlib.contextmanager
-def impersonate(
-    username, setegid=True, setgid=False, chdir=True, set_home=False
+def impersonated_thread(
+    username, target, args=(),
+    setegid=True, setgid=False, chdir=True, set_home=False
 ):
-    try:
-        pw_ent = getpwnam(username)
-    except KeyError as e:
-        raise UserImpersonationError from e
-    dir_changed = False
-    try:
-        cwd = os.curdir
-        with contextlib.ExitStack() as stack:
+#    try:
+#        pw_ent = getpwnam(username)
+#    except KeyError as e:
+#        raise UserImpersonationError from e
+
+    if not callable(target):
+        raise UserImpersonationError(
+            'target is not callable.'
+        )
+
+    que_ = queue.Queue()
+    def impersonate(*args):
+        try:
+            pw_ent = getpwnam(username)
             if setgid:
                 orig_egid = os.getegid()
-                stack.enter_context(switch_gid(pw_ent.pw_gid))
+                os.setgid(pw_ent.pw_gid)
                 if not setegid:
-                    stack.enter_context(switch_egid(orig_egid))
+                    os.setegid(orig_egid)
             elif setegid and not setgid:
-                stack.enter_context(switch_egid(pw_ent.pw_gid))
+                os.setegid(pw_ent.pw_gid)
 
+            os.setuid(pw_ent.pw_uid)
             if chdir:
                 os.chdir(pw_ent.pw_dir)
-                dir_changed = True
 
             if set_home:
-                stack.enter_context(env({'HOME': pw_ent.pw_dir}))
+                with env({'HOME': pw_ent.pw_dir}):
+                    return target.__call__(*args)
+            ret = target.__call__(*args)
+            que_.put(ret)
+            return ret
+        except (KeyError):
+            que_.put(
+                UserImpersonationError(
+                    'Could not find user `{}`'.format(username)
+                )
+            )
+        except Exception as e:
+            que_.put(UserImpersonationError(e))
 
-            stack.enter_context(switch_euid(pw_ent.pw_uid))
-            yield
-    finally:
-        if dir_changed:
-            os.chdir(cwd)
+    t = threading.Thread(target=impersonate, args=args)
+    t.start()
+    t.join()
+    # Quick handling of exception in thread
+    if que_.empty():
+        raise UserImpersonationError('Some internal error occurred.')
+    ret = que_.get()
+    if isinstance(ret, Exception):
+        raise ret
+    que_.task_done()
+    return ret
