@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import warnings
 import weakref
 import zipfile
 
@@ -206,6 +207,7 @@ class VBoxAPIInstaller:
 
     @staticmethod
     def installation_test():
+        _module = None
         try:
             _module = importlib.import_module('virtualbox')
 
@@ -222,4 +224,5 @@ class VBoxAPIInstaller:
         try:
             test_method()
         except Exception as e:
-            print('ERROR Using {}: {}'.format(_module.__file__, e))
+            modname = _module.__file__ if _module is not None else 'vboxapi'
+            warnings.warn('ERROR Using {}: {}'.format(modname, e))
