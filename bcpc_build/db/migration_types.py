@@ -1,6 +1,10 @@
 from enum import Enum
 from enum import unique
-from sqlalchemy_utils.types.uuid import UUIDType
+import sqlalchemy_utils.types.uuid as uuid
+
+
+UUIDType = uuid.UUIDType
+
 
 @unique
 class BuildStateEnum(Enum):
@@ -16,3 +20,11 @@ class BuildStateEnum(Enum):
 
     def __str__(self):
         return self.value
+
+    @classmethod
+    def names(cls):
+        return cls._member_names_
+
+    @classmethod
+    def values(cls):
+        return [str(x) for x in cls._member_map_.values()]
