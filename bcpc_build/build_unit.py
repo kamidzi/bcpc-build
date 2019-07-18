@@ -6,6 +6,7 @@ from itertools import chain
 from pwd import getpwnam
 from subprocess import check_output
 from textwrap import dedent
+import contextlib
 import logging
 import os
 import shlex
@@ -13,6 +14,7 @@ import shutil
 import string
 import subprocess
 import sys
+import warnings
 
 from furl import furl
 from psutil import process_iter
@@ -244,6 +246,13 @@ class BuildUnitAllocator(ABC):
         bunit.build_state = state
         self.session.add(bunit)
         self.session.commit()
+        try:
+            self.session.delete(bunit)
+        except Exception:
+            warnings.warn(
+                'Could not delete {}. This is likely to cause consistency'
+                ' errors'.format(bunit)
+            )
 
     def install_certs(self, bunit):
         CERTS_DIR = '/var/tmp/bcpc-cacerts'
@@ -371,9 +380,19 @@ class BuildUnitAllocator(ABC):
                 self.configure(build, src_depends=conf.get('src_depends'))
             self.set_build_state(build, BuildStateEnum.provisioned)
         except Exception as e:
-            self.set_build_state(build, BuildStateEnum.failed_provision)
+            with self.rollback():
+                self.set_build_state(build, BuildStateEnum.failed_provision)
             raise ProvisionError(e) from e
         return build
+
+    @contextlib.contextmanager
+    def rollback(self):
+        try:
+            self.session.rollback()
+            # What of a rollback failure?
+            yield
+        finally:
+            pass
 
     def destroy(self, bunit, commit=True):
         # find processes
@@ -381,8 +400,9 @@ class BuildUnitAllocator(ABC):
         # userdel -r
         def get_procs(user):
             p_attrs = ['pid', 'username']
-            plist = list(filter(lambda p: p.info['username'] == user,
-                                process_iter(p_attrs)))
+            plist = list(filter(
+                lambda p: p.info['username'] == user, process_iter(p_attrs)
+            ))
             return plist
 
         def kill_user_procs(user):
