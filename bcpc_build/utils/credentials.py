@@ -1,10 +1,9 @@
 from pwd import getpwnam
 from warnings import warn
 import contextlib
+import multiprocessing
 import os
 import sys
-import threading
-import queue
 
 from bcpc_build.unit import ConfigFile
 import furl
@@ -149,21 +148,25 @@ def chdir(dest):
         os.chdir(curdir)
 
 
-def impersonated_thread(
-    username, target, args=(),
+def impersonated_process(
+    username, target, args=(), daemon=False,
     setegid=True, setgid=False, chdir=True, set_home=True
 ):
-#    try:
-#        pw_ent = getpwnam(username)
-#    except KeyError as e:
-#        raise UserImpersonationError from e
+    try:
+        getpwnam(username)
+    except KeyError as e:
+        raise UserImpersonationError from e
+
+    if daemon is True:
+        raise NotImplementedError('Daemonized threads.')
 
     if not callable(target):
         raise UserImpersonationError(
             'target is not callable.'
         )
 
-    que_ = queue.Queue()
+    que_ = multiprocessing.JoinableQueue()
+
     def impersonate(*args):
         try:
             pw_ent = getpwnam(username)
@@ -184,6 +187,7 @@ def impersonated_thread(
             else:
                 cm = nullcontext()
             with cm:
+                # will need to wrap target in cm
                 ret = target.__call__(*args)
             que_.put(ret)
             return ret
@@ -196,12 +200,11 @@ def impersonated_thread(
         except Exception as e:
             que_.put(UserImpersonationError(e))
 
-    t = threading.Thread(target=impersonate, args=args)
-    t.start()
-    t.join()
-    # Quick handling of exception in thread
-    if que_.empty():
-        raise UserImpersonationError('Some internal error occurred.')
+    def is_parent():
+        return os.getpid() == os.getppid()
+
+    p = multiprocessing.Process(target=impersonate, args=args, daemon=daemon)
+    p.start()
     ret = que_.get()
     if isinstance(ret, Exception):
         raise ret
