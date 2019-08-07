@@ -1,5 +1,4 @@
 from abc import ABC
-from abc import abstractmethod
 from collections import OrderedDict
 from functools import total_ordering
 from itertools import chain
@@ -22,13 +21,20 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import shortuuid
 
-from bcpc_build.db.models.build_unit import BuildStateEnum
-from bcpc_build.db.models.build_unit import BuildUnitBase
-from bcpc_build.exceptions import *
 from bcpc_build import config
 from bcpc_build import utils
+from bcpc_build.db.models.build_unit import BuildStateEnum
+from bcpc_build.db.models.build_unit import BuildUnitBase
+from bcpc_build.exceptions import AllocationError
+from bcpc_build.exceptions import BuildError
+from bcpc_build.exceptions import ConfigurationError
+from bcpc_build.exceptions import DuplicateNameError
+from bcpc_build.exceptions import NonZeroExit
+from bcpc_build.exceptions import ProvisionError
+from bcpc_build.exceptions import SignalException
 from bcpc_build.unit import V8ConfigHandler
-from bcpc_build.utils.credentials import impersonated_thread
+from bcpc_build.utils.credentials import impersonated_process
+
 
 try:
     import simplejson as json
@@ -583,13 +589,12 @@ class V8BuildUnitAllocator(BuildUnitAllocator):
         # update the networks with generated ids
         comp = 'chef-bcpc'
         config_handler = bunit_config
-        nt_component_conf = config_handler.configs[comp]
         networks = list(config_handler.configs[comp].enumerate_nets())
 
         core_configs = config_handler.configs['chef-bcpc']
         cfg_prefix = 'topology/topology.yml'
         conf = core_configs.configs[cfg_prefix]
-        netmap = impersonated_thread(
+        netmap = impersonated_process(
             bunit.build_user, utils.generate_netids_from_system, args=networks,
             chdir=False
         )
